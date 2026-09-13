@@ -160,7 +160,19 @@
   #detail b { color: #ffd75e; }
   #selectedWord { color: #7fd4ff; font-size: 15px; font-weight: bold; }
   /* V7.1：选中塔的信息卡 → 顶栏中间区，单行紧凑 */
-  #hudCenter { flex: 1 1 auto; display: flex; align-items: center; justify-content: center; gap: 8px; min-width: 0; }
+  #hudCenter { position: relative; flex: 1 1 auto; display: flex; align-items: center; justify-content: center; gap: 8px; min-width: 0; }
+  /* V9.8：中央"低频词飘字"——取使用次数最低的词随机轮换，若隐若现 */
+  #wordHint {
+    position: absolute; left: 50%; top: 50%; transform: translate(-50%,-50%);
+    display: flex; align-items: baseline; gap: 8px; pointer-events: none;
+    font-size: clamp(13px, 2.4vmin, 18px); font-weight: 700; letter-spacing: .5px;
+    white-space: nowrap; max-width: 96%; overflow: hidden;
+    opacity: 0; transition: opacity 1.2s ease;
+  }
+  #wordHint .wh-w { color: #9fe3ff; text-shadow: 0 0 12px rgba(120,200,255,.4), 0 1px 3px rgba(0,0,0,.7); }
+  #wordHint .wh-m { color: #ffe9ad; text-shadow: 0 1px 3px rgba(0,0,0,.7); }
+  #wordHint.show { opacity: .55; animation: whBreath 3.5s ease-in-out infinite; }   /* 若隐若现 */
+  @keyframes whBreath { 0%,100% { opacity:.26 } 50% { opacity:.74 } }
   #towerInfo {
     display: none; padding: 3px 10px; border-radius: 8px; background: rgba(16,26,40,.85);
     border: 1px solid #3d5a80; font-size: 12px; line-height: 1.4; color: #cfe2f5;
@@ -507,6 +519,7 @@
         <button id="pauseBtn">⏸</button>
       </div>
       <div id="hudCenter">
+        <div id="wordHint"></div>
         <div id="towerInfo"></div>
         <button id="upgradeBtn" style="display:none;">⬆ 升级 4⚡</button>
         <button id="sellBtn" style="display:none;">出售 +1⚡</button>
@@ -664,7 +677,7 @@
 
   <div class="mm-toast" id="mmToast"></div>
   <p class="mm-tip">游戏内：按住塔查看攻击范围 · 点击塔查看信息 · Ctrl+G 怪物图鉴 · 空格/下一波 开始进攻</p>
-  <div class="mm-ver">正常模式第三版 V9.7 · 美术系统 × 五十关长图 · by 你的私人游戏开发助手</div>
+  <div class="mm-ver">正常模式第三版 V9.8 · 五十关长图 × 低频词提示 · by 你的私人游戏开发助手</div>
 </div>
 
 <div id="gameover">
@@ -1317,6 +1330,44 @@ function recordWordUse(word){
 function wordUsedCount(word){
   const k = String(word || '').toLowerCase();
   return wordUsage[k] || 0;
+}
+
+/* ============ V9.8：低频词飘字提示（HUD 中央 · 与图鉴同源实时数据） ============ */
+/* 规则：只从"使用次数最低的一批词"里随机抽；新一首排除上一首防连播；
+   池里只剩上一首→允许连播；每次亮词前(即空白2秒末尾)重读 wordUsage 重算词池 */
+let hintLastKey = '';
+let hintTimer = null;
+function hintBusy(){                                   // 选中塔操作面板占位 / 编辑模式 → 飘字让位
+  try { if (editMode) return true; } catch(e){}
+  const ti = $('towerInfo');
+  return !!(ti && ti.style && ti.style.display === 'block');
+}
+function pickHintWord(){
+  let min = Infinity;
+  for (const w of WORDS){ const c = wordUsedCount(w.word); if (c < min) min = c; }
+  const pool = WORDS.filter(w => wordUsedCount(w.word) === min);
+  if (!pool.length) return null;
+  let cand = pool.filter(w => w.word.toLowerCase() !== hintLastKey);   // 排除上一首
+  if (!cand.length) cand = pool;                                        // 只剩它自己 → 允许重复
+  const pick = cand[(Math.random()*cand.length)|0];
+  hintLastKey = pick.word.toLowerCase();
+  return pick;
+}
+function startWordHint(){
+  if (hintTimer) return;                               // 防重复启动
+  const el = $('wordHint'); if (!el) return;
+  const step = () => {
+    if (hintBusy()){ el.classList.remove('show'); hintTimer = setTimeout(step, 2000); return; }   // 忙→空2秒后重查
+    const w = pickHintWord();
+    if (!w){ hintTimer = setTimeout(step, 2000); return; }
+    el.innerHTML = '<span class="wh-w">'+w.word+'</span><span class="wh-m">'+w.meaning+'</span>';
+    el.classList.add('show');                          // 若隐若现亮 5 秒
+    hintTimer = setTimeout(() => {
+      el.classList.remove('show');                     // 淡出
+      hintTimer = setTimeout(step, 2000);              // 空白 2 秒（此时重算词池定下一首）
+    }, 5000);
+  };
+  step();
 }
 
 // 种植状态（打字输入）
@@ -5632,6 +5683,7 @@ document.querySelectorAll('#mmSettings .set-btn').forEach(btn => {
 initMinimap();
 loadUsage();            // V6：加载单词使用次数（持久化，跨局跨模式累计）
 updatePanel();
+try { startWordHint(); } catch(e){}   // V9.8：启动中央低频词飘字提示（图鉴同源·实时）
 $('goldTxt').textContent = energy;
 updateModeTxt();        // V7：初始化 HUD 模式标识与波次显示
 $('hpFill').style.width = '100%';
