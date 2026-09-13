@@ -10,6 +10,7 @@
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <meta name="apple-mobile-web-app-title" content="单词萝卜">
 <meta name="theme-color" content="#141b26">
+<meta name="color-scheme" content="dark">   <!-- V9.7b：Safari 上下工具栏跟随深色，不再白晃晃 -->
 <link rel="apple-touch-icon" href="apple-touch-icon.png">
 <link rel="manifest" href="manifest.webmanifest">
 <style>
@@ -263,6 +264,15 @@
     padding: 7px 18px; border-radius: 999px; display: none; white-space: nowrap;
   }
   @keyframes lmPulse { 0%,100% { box-shadow: 0 8px 22px rgba(0,0,0,.4), 0 0 0 0 rgba(127,224,138,.55);} 50% { box-shadow: 0 8px 22px rgba(0,0,0,.4), 0 0 0 14px rgba(127,224,138,0);} }
+  /* V9.7b：浏览器窗口里的"装到主屏"引导胶囊（全屏 App 模式不出现） */
+  #installTip { position: fixed; top: calc(8px + env(safe-area-inset-top)); left: 50%; transform: translateX(-50%); z-index: 400;
+    display: flex; align-items: center; gap: 8px; max-width: 92vw;
+    background: rgba(18,28,44,.92); border: 1px solid #ffd75e; color: #ffe9ad;
+    font-size: 12px; line-height: 1.5; padding: 8px 10px 8px 14px; border-radius: 999px;
+    box-shadow: 0 8px 24px rgba(0,0,0,.5); }
+  #installTip b { color: #ffd75e; }
+  #installTip .x { cursor: pointer; flex: 0 0 auto; width: 22px; height: 22px; border-radius: 50%;
+    display: flex; align-items: center; justify-content: center; background: rgba(255,255,255,.14); color: #fff; font-size: 13px; }
   /* ============ V5.2 游戏主界面 ============ */
   #mainmenu {
     display: flex; position: fixed; inset: 0; z-index: 100;
@@ -574,6 +584,11 @@
   <div class="lm-vig r"></div>
   <div class="lm-hint">◀ 按住拖动 · 左右滑动 · 五十关一路到底 ▶</div>
   <div class="lm-toast" id="lvlToast"></div>
+</div>
+
+<!-- V9.7b：安装引导（仅 Safari/浏览器标签里有，从主屏图标进入不显示） -->
+<div id="installTip" style="display:none;">
+  <span>📲 Safari 分享 → <b>添加到主屏幕</b>，即可全屏无网址栏</span><span class="x" id="installTipClose">✕</span>
 </div>
 
 <!-- V9.5：地图导出弹窗（编辑器📤按钮唤出，复制文本发给开发助手即可替换正式关卡） -->
@@ -5623,6 +5638,17 @@ $('hpFill').style.width = '100%';
 paintMenuSettings();
 fitCanvasToWindow();    // V7.2：启动即按全屏布局摆好战场（双模式统一）
 requestAnimationFrame(loop);
+/* V9.7b：非独立运行模式才弹安装引导；✕ 关掉后永久不再打扰 */
+try {
+  (function(){
+    var standalone = !!navigator.standalone;                                    // iOS Safari 主屏模式
+    if (!standalone && window.matchMedia) standalone = window.matchMedia('(display-mode: standalone)').matches;
+    var tip = $('installTip');
+    if (!tip || standalone || localStorage.getItem('cwdr_tip_dismissed')) return;
+    tip.style.display = 'flex';
+    $('installTipClose').addEventListener('click', function(){ tip.style.display='none'; localStorage.setItem('cwdr_tip_dismissed','1'); });
+  })();
+} catch(e){}
 /* V9.7 iOS PWA：Service Worker 离线缓存（仅 https 线上环境注册；本地 file:// 与冒烟沙箱自动跳过） */
 try { if (navigator.serviceWorker && location.protocol === 'https:') navigator.serviceWorker.register('sw.js'); } catch(e){}
 </script>
