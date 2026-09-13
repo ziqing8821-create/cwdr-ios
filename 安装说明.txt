@@ -1,0 +1,28 @@
+📱 把「单词萝卜」装进 iPhone 16（PWA，不占 App Store，30 秒搞定）
+
+【准备工作】
+  游戏已部署到 GitHub Pages 公网地址（用 Safari 打开即可）：
+  https://ziqing8821-create.github.io/cwdr-ios/
+
+【安装步骤（就在 iPhone 上操作）】
+  1. 用系统自带的 Safari 打开上面地址（微信/QQ 内置浏览器不行）
+  2. 等游戏加载出来 → 点底部中间的「分享」按钮（方框+向上箭头）
+  3. 往下翻，选「添加到主屏幕」→ 右上「添加」
+  4. 桌面出现绿色草地史莱姆图标 = 安装完成 ✅
+
+【之后怎么玩】
+  · 以后直接从桌面图标进：全屏、无地址栏，就是个独立 App
+  · 首次联网加载过一次后，坐飞机断网也能玩（Service Worker 离线缓存）
+  · 通关进度存在 iPhone 本机里（localStorage），关了也不丢
+
+【以后游戏更新了怎么办】
+  告诉开发助手改完代码 → 一键重新发布 GitHub Pages
+  → iPhone 上删旧图标重新「添加到主屏幕」即可（或开着 App 联网自动刷新缓存）
+
+【这个文件夹里有什么】
+  index.html            游戏本体（单文件 502KB，词库+精灵全内嵌）
+  manifest.webmanifest  PWA 名片（名字/图标/全屏模式）
+  sw.js                 离线缓存服务
+  apple-touch-icon.png  iPhone 主屏图标 180px
+  icon-512.png          商店级图标 512px
+  （由 正常模式第三版\tools\make_ios_pkg.ps1 + gh CLI 发布）
