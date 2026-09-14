@@ -1,4 +1,4 @@
-/* 单词萝卜 iOS PWA · 离线缓存：游戏是单文件自包含（词库/精灵全内嵌），缓存一个页面即可离线玩 */
+﻿/* 单词萝卜 iOS PWA · 离线缓存：游戏是单文件自包含（词库/精灵全内嵌），缓存一个页面即可离线玩 */
 const CACHE = 'cwdr-v97-' + '1';
 const ASSETS = ['./', './index.html', './manifest.webmanifest', './apple-touch-icon.png', './icon-512.png'];
 self.addEventListener('install', e => {
@@ -17,3 +17,4 @@ self.addEventListener('fetch', e => {
     }).catch(() => caches.match(e.request).then(r => r || caches.match('./index.html')))  // 断网回缓存
   );
 });
+
