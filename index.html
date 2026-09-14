@@ -689,7 +689,7 @@
 
   <div class="mm-toast" id="mmToast"></div>
   <p class="mm-tip">游戏内：按住塔查看攻击范围 · 点击塔查看信息 · Ctrl+G 怪物图鉴 · 空格/下一波 开始进攻</p>
-  <div class="mm-ver">正常模式第四版 V10.0 · 大格种植 × 经济收紧 × iPhone直达点击 · by 你的私人游戏开发助手</div>
+  <div class="mm-ver">正常模式第四版 V10.1 · 塔字等比放大 × 触摸拖图捏合缩放 · by 你的私人游戏开发助手</div>
 </div>
 
 <div id="gameover">
@@ -1220,6 +1220,52 @@ cv.addEventListener('wheel', e => {
   camera.y += (before.y - after.y);
   cameraClamp();
 }, { passive: false });
+/* V10.1 iPhone/iPad：无尽模式触摸手势——单指拖=平移、双指捏合=缩放（正常固定一屏不介入；拖后合成 click 抑制防误建） */
+let touchMoved = false;
+try {
+  (function(){
+    if (!('ontouchstart' in window)) return;
+    let tPan = null, tPinch = null;
+    const tDist = ts => Math.hypot(ts[0].clientX-ts[1].clientX, ts[0].clientY-ts[1].clientY) || 1;
+    cv.addEventListener('touchstart', e => {
+      touchMoved = false;
+      if (!cameraFree) return;
+      if (e.touches.length === 2){ tPinch = { d0: tDist(e.touches), z0: camera.zoom }; tPan = null; }
+      else if (e.touches.length === 1){ const t = e.touches[0]; tPan = { sx:t.clientX, sy:t.clientY, camX:camera.x, camY:camera.y, moved:false }; }
+    }, { passive:true });
+    cv.addEventListener('touchmove', e => {
+      if (!cameraFree) return;
+      const ts = e.touches;
+      if (tPinch && ts.length >= 2){
+        e.preventDefault(); touchMoved = true;
+        const rect = cv.getBoundingClientRect();
+        const mx = ((ts[0].clientX+ts[1].clientX)/2 - rect.left)*CW/rect.width;
+        const my = ((ts[0].clientY+ts[1].clientY)/2 - rect.top)*CH/rect.height;
+        const before = screenToWorld(mx, my);
+        camera.zoom = clamp(tPinch.z0 * (tDist(ts)/tPinch.d0), zoomMin(), ZOOM_MAX);
+        const after = screenToWorld(mx, my);
+        camera.x += before.x - after.x; camera.y += before.y - after.y;
+        cameraClamp();
+      } else if (tPan && ts.length === 1){
+        const t = ts[0];
+        const ddx = t.clientX - tPan.sx, ddy = t.clientY - tPan.sy;
+        if (!tPan.moved){ if (Math.hypot(ddx,ddy) < 10) return; tPan.moved = true; }
+        e.preventDefault(); touchMoved = true;
+        camera.x = clamp(tPan.camX - ddx/camera.zoom, 0, WORLD_W);
+        camera.y = clamp(tPan.camY - ddy/camera.zoom, 0, WORLD_H);
+        cameraClamp();
+      }
+    }, { passive:false });
+    const onTouchEnd = e => {
+      if (e.touches.length === 0){
+        if (tPan && tPan.moved) touchMoved = true;
+        tPan = null; tPinch = null;
+      } else if (e.touches.length === 1){ tPinch = null; tPan = null; }   // 双指抬一指：不误触平移/点击
+    };
+    cv.addEventListener('touchend', onTouchEnd, { passive:true });
+    cv.addEventListener('touchcancel', onTouchEnd, { passive:true });
+  })();
+} catch(e){}
 const holdKeys = {};
 window.addEventListener('keydown', e => {
   const k = e.key.toLowerCase();
@@ -3849,7 +3895,7 @@ function updateNotice(dt){
 
 /* ============ 种植交互：点击 + 打字 ============ */
 cv.addEventListener('click', e => {
-  if (gameOver || gameWin || dragPan) return;
+  if (gameOver || gameWin || dragPan || touchMoved) return;   // V10.1：触摸拖拽后的合成 click 不算点塔
   const rect = cv.getBoundingClientRect();
   const sx = (e.clientX-rect.left)*CW/rect.width;
   const sy = (e.clientY-rect.top)*CH/rect.height;
@@ -4339,10 +4385,10 @@ function drawTowers(){
       ctx.restore();
     }
     // V7.3：完整单词+字号自适应足迹宽度（长词也不截断）
-    // V7.3.1：文字限宽=足迹整宽两侧各留4px，常规词（含1格4字母）统一保持 23px，仅超长词才缩
+    // V10.1：基准字号随种植格等比放大，超长词仍自动缩
     ctx.fillStyle = '#fff';
     ctx.textAlign='center'; ctx.textBaseline='middle';
-    let fs = 23; const maxW = span*CELL - 8;
+    let fs = Math.max(13, Math.round(CELL*0.36)); const maxW = span*CELL - 8;   // V10.1：字号随格等比（64格→23 基准；96→35；无尽160→58）
     ctx.font = 'bold '+fs+'px "Courier New", monospace';
     while (ctx.measureText(t.wd.word).width > maxW && fs > 9){
       fs -= 1.5;
@@ -4372,7 +4418,7 @@ function drawTowers(){
       ctx.fillStyle = ok ? '#52b788' : '#8a3535';
       roundRect(fx-bw/2, pendingCell.cy-bh/2, bw, bh, 10); ctx.fill();
       ctx.fillStyle = '#fff'; ctx.textAlign='center'; ctx.textBaseline='middle';
-      let fs = 23; const maxW = span*CELL - 8;   // V7.3.1：与实体塔完全一致的字号规则
+      let fs = Math.max(13, Math.round(CELL*0.36)); const maxW = span*CELL - 8;   // V10.1：与实体塔完全一致的等比字号
       ctx.font = 'bold '+fs+'px "Courier New", monospace';
       while (ctx.measureText(preview.word).width > maxW && fs > 9){
         fs -= 1.5;
