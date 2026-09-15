@@ -15,6 +15,7 @@
 <link rel="manifest" href="manifest.webmanifest">
 <style>
   * { margin: 0; padding: 0; box-sizing: border-box; }
+  html { overflow: hidden; height: 100%; }   /* V10.11：杜绝任何文档级滚动残留（旋转缩放卡死时"能推着滑动"的表象之一） */
   body {
     background: #141b26;
     font-family: "Microsoft YaHei", "PingFang SC", sans-serif;
@@ -708,7 +709,7 @@
 
   <div class="mm-toast" id="mmToast"></div>
   <p class="mm-tip">游戏内：按住塔查看攻击范围 · 点击塔查看信息 · Ctrl+G 怪物图鉴 · 空格/下一波 开始进攻</p>
-  <div class="mm-ver">正常模式第四版 V10.10 · 横屏旋转改包装层(修iOS缩放bug) · by 你的私人游戏开发助手</div>
+  <div class="mm-ver">正常模式第四版 V10.11 · viewport动态重写修死缩放 · by 你的私人游戏开发助手</div>
 </div>
 
 <div id="gameover">
@@ -2000,6 +2001,21 @@ function canvasPt(cx, cy){                       // client 物理坐标 → 画�
     : { x: (cx - r.left) * CW / r.width,  y: (cy - r.top) * CH / r.height };
 }
 function canvasDelta(dx, dy){ return rotActive ? { x: dy, y: -dx } : { x: dx, y: dy }; }   // 屏幕像素位移 → 游戏空间位移（旋转时换轴）
+/* V10.11：iOS 旋转后视觉缩放卡死 bug 的根治——动态改写 viewport meta。
+   用 screen 长短边（不随旋转时序撒谎的唯一可信源）显式声明 width 像素值，
+   并保证每次改写内容必有变化（flip），强制 Safari 重算整页缩放；window.scrollTo 清掉残留平移 */
+const VP_BASE = 'width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover';
+function syncViewportMeta(on){
+  const m = document.querySelector('meta[name="viewport"]');
+  if (!m) return;
+  const touch = ('ontouchstart' in window) || (navigator.maxTouchPoints || 0) > 0;
+  if (!touch){ if (m.getAttribute('content') !== VP_BASE) m.setAttribute('content', VP_BASE); return; }   // 桌面不动 meta
+  const sMin = Math.min(screen.width || 0, screen.height || 0) || window.innerWidth || 980;
+  const sMax = Math.max(screen.width || 0, screen.height || 0) || window.innerWidth || 980;
+  const want = 'width=' + Math.round(on ? sMin : sMax) + ', initial-scale=1, maximum-scale=1.0, user-scalable=no, viewport-fit=cover';
+  m.setAttribute('content', m.getAttribute('content') === want ? want.replace('initial-scale=1,', 'initial-scale=1.0,') : want);
+  try { window.scrollTo(0, 0); } catch(e){}
+}
 function applyOrientation(){
   const vv = window.visualViewport;
   const vw = (vv && vv.width)  || window.innerWidth  || 1280;
@@ -2009,6 +2025,7 @@ function applyOrientation(){
   rotActive = on;
   if (on){ rotWrap.classList.add('rot90'); rotWrap.style.width = vh + 'px'; rotWrap.style.height = vw + 'px'; }
   else   { rotWrap.classList.remove('rot90'); rotWrap.style.width = '';      rotWrap.style.height = ''; }
+  syncViewportMeta(on);   // 先稳缩放，再量画布（顺序重要：fitCanvas 读的 vv 数值要落在正确倍率上）
   fitCanvasToWindow();
 }
 window.addEventListener('orientationchange', () => { setTimeout(applyOrientation, 60); setTimeout(applyOrientation, 300); });   // iOS 旋转动画中 visualViewport 数值会撒谎，落定后再补算两次
