@@ -423,12 +423,13 @@
     border-radius: 0; overflow: hidden; background: #a8d88f;   /* 方案C：外围留白=草地绿 */
   }
   #app.fs.fs-normal #left { background: #a8d88f; }
-  /* ============ V10.7 强制横屏：触摸设备竖持时整个 body 旋转90°（竖屏不可游玩；fixed 层自动以 body 为基准） ============ */
-  body.rot90 { position: fixed; top: 0; left: 0; margin: 0; overflow: hidden; transform-origin: 0 0; transform: rotate(90deg) translateY(-100%); }
-  body.rot90 #app.fs #left { width: 100% !important; height: 100% !important; }   /* 旋转时 vw/vh 单位指向反了，改用百分比 */
-  body.rot90 #panel { height: 100%; }
-  body.rot90 #hud { max-width: 96%; }
-  body.rot90 #mainmenu .mm-settings { max-width: 96%; }
+  /* ============ V10.10 强制横屏（修正版）：旋转的是 fixed 包装层而非 body —— body 永远不超视口宽，根治 iOS 旋转时 Safari 擅自重设页面缩放（"突然变大"bug） ============ */
+  #rotwrap { display: contents; }   /* 未旋转时对布局完全透明，行为与旧结构一致 */
+  #rotwrap.rot90 { display: block; position: fixed; top: 0; left: 0; overflow: hidden; transform-origin: 0 0; transform: rotate(90deg) translateY(-100%); }
+  #rotwrap.rot90 #app.fs #left { width: 100% !important; height: 100% !important; }   /* 旋转时 vw/vh 单位指向反了，改用百分比（含块=rotwrap 游戏空间） */
+  #rotwrap.rot90 #panel { height: 100%; }
+  #rotwrap.rot90 #hud { max-width: 96%; }
+  #rotwrap.rot90 #mainmenu .mm-settings { max-width: 96%; }
   #app.fs canvas#cv { position: absolute; left: 50%; transform: translateX(-50%); margin: 0; }
   #app.fs #hud {
     position: absolute; top: 0; left: 0; right: 0; z-index: 40;
@@ -707,7 +708,7 @@
 
   <div class="mm-toast" id="mmToast"></div>
   <p class="mm-tip">游戏内：按住塔查看攻击范围 · 点击塔查看信息 · Ctrl+G 怪物图鉴 · 空格/下一波 开始进攻</p>
-  <div class="mm-ver">正常模式第四版 V10.9 · 四芒呼吸星(回滚) × 强制横屏 · by 你的私人游戏开发助手</div>
+  <div class="mm-ver">正常模式第四版 V10.10 · 横屏旋转改包装层(修iOS缩放bug) · by 你的私人游戏开发助手</div>
 </div>
 
 <div id="gameover">
@@ -1985,8 +1986,13 @@ function fitCanvasToWindow(){
 }
 window.addEventListener('resize', applyOrientation);   // V10.7：resize/转屏统一走"横屏判定+重布局"
 if (window.visualViewport) window.visualViewport.addEventListener('resize', applyOrientation);
-/* ============ V10.7 强制横屏：手机/平板竖屏→body旋转90°，坐标/拖拽随之换算 ============ */
+/* ============ V10.10 强制横屏：竖屏→旋转全游戏包装层（body 不超宽，防 iOS 旋转缩放 bug），坐标/拖拽随之换算 ============ */
 let rotActive = false;
+// 启动即把 body 全部子节点搬进 #rotwrap：display:contents 使其对现有布局零影响；旋转时只转它
+const rotWrap = document.createElement('div');
+rotWrap.id = 'rotwrap';
+while (document.body.firstChild) rotWrap.appendChild(document.body.firstChild);
+document.body.appendChild(rotWrap);
 function canvasPt(cx, cy){                       // client 物理坐标 → 画布逻辑坐标（旋转时自动逆运算）
   const r = cv.getBoundingClientRect();
   return rotActive
@@ -2001,11 +2007,11 @@ function applyOrientation(){
   const touch = ('ontouchstart' in window) || (navigator.maxTouchPoints || 0) > 0;
   const on = touch && vw < vh && Math.max(vw, vh) <= 1200;   // 只限手机/平板；桌面与大屏触控一体机不受强转
   rotActive = on;
-  const b = document.body;
-  if (on){ b.classList.add('rot90'); b.style.width = vh + 'px'; b.style.height = vw + 'px'; }
-  else   { b.classList.remove('rot90'); b.style.width = '';      b.style.height = ''; }
+  if (on){ rotWrap.classList.add('rot90'); rotWrap.style.width = vh + 'px'; rotWrap.style.height = vw + 'px'; }
+  else   { rotWrap.classList.remove('rot90'); rotWrap.style.width = '';      rotWrap.style.height = ''; }
   fitCanvasToWindow();
 }
+window.addEventListener('orientationchange', () => { setTimeout(applyOrientation, 60); setTimeout(applyOrientation, 300); });   // iOS 旋转动画中 visualViewport 数值会撒谎，落定后再补算两次
 try { screen.orientation && screen.orientation.lock && screen.orientation.lock('landscape').catch(function(){}); } catch(e){}   // 安卓/PWA 能锁则锁，iOS 静默失败靠 CSS 旋转兜底
 function worldToScreen(wx, wy){
   return { x: (wx - camera.x)*camera.zoom + CW/2, y: (wy - camera.y)*camera.zoom + CH/2 };
@@ -6781,7 +6787,7 @@ if (TESTBENCH){
         '<button id="tpSlow" style="'+ctl+'cursor:pointer">🐢 慢动作</button>' +
       '</div>' +
       '<div id="tpInfo" style="color:#8aa0b8">点🚀在当前地图随机入口放怪 · 塔随便种 · 击杀看死亡/分裂动画</div>';
-    document.body.appendChild(P);
+    (document.getElementById('rotwrap') || document.body).appendChild(P);   // V10.10：搬进可旋转包装层，竖屏强转时面板跟着转
     let autoTimer = null;
     function ensureRunning(){
       if (menuOpen){ menuOpen = false; closeMainMenu(); }
