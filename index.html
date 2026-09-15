@@ -707,7 +707,7 @@
 
   <div class="mm-toast" id="mmToast"></div>
   <p class="mm-tip">游戏内：按住塔查看攻击范围 · 点击塔查看信息 · Ctrl+G 怪物图鉴 · 空格/下一波 开始进攻</p>
-  <div class="mm-ver">正常模式第四版 V10.7 · 强制横屏 × 星星种植点 · by 你的私人游戏开发助手</div>
+  <div class="mm-ver">正常模式第四版 V10.8 · 五角星种植点 × 强制横屏 · by 你的私人游戏开发助手</div>
 </div>
 
 <div id="gameover">
@@ -5199,7 +5199,7 @@ function drawMap(){
   ctx.fillRect(b.x-40, b.y+38, 80, 10);
   ctx.fillStyle = '#ff6b6b';
   ctx.fillRect(b.x-40, b.y+38, 80*(b.hp/b.maxHp), 10);
-  // V10.7：可种植点位=呼吸发光的四角小星星（每颗相位/周期随机、每关重摇；亮部暖白、光晕金黄，任何地图背景都清晰）
+  // V10.8：可种植点位=五角星（常驻描边，熄灭也看得见线条；呼吸只叠加点亮度），每颗相位/周期随机、每关重摇
   const sT = performance.now() / 1000;
   const i0 = Math.max(0, Math.ceil((camera.x - CW/2/camera.zoom - CELL/2)/CELL));
   const i1 = Math.min(Math.floor(WORLD_W/CELL), Math.floor((camera.x + CW/2/camera.zoom - CELL/2)/CELL));
@@ -5213,17 +5213,22 @@ function drawMap(){
       h = Math.imul(h ^ (h >>> 13), 1274126177) >>> 0;
       const b = 0.5 + 0.5 * Math.sin(sT * 6.283 / (1.6 + (h & 31) / 11) + (h % 6283) / 1000);   // 呼吸波：周期 1.6~4.4s 随机
       const a = 0.10 + 0.90 * b * b;                                    // 缓亮急灭（平方曲线）
-      const s = (7.5 + 2.5 * b) / camera.zoom;                          // 屏上固定 ~8~10px，任何缩放都可见
-      ctx.fillStyle = 'rgba(255,214,90,' + (a * 0.28).toFixed(3) + ')'; // 金黄光晕
-      ctx.beginPath(); ctx.arc(gx, gy, s * 2.1, 0, 7); ctx.fill();
-      ctx.fillStyle = 'rgba(255,248,214,' + (0.22 + 0.78 * a).toFixed(3) + ')';   // 四角星体
-      ctx.beginPath();
-      ctx.moveTo(gx, gy - s);
-      ctx.quadraticCurveTo(gx + s * 0.16, gy - s * 0.16, gx + s, gy);
-      ctx.quadraticCurveTo(gx + s * 0.16, gy + s * 0.16, gx, gy + s);
-      ctx.quadraticCurveTo(gx - s * 0.16, gy + s * 0.16, gx - s, gy);
-      ctx.quadraticCurveTo(gx - s * 0.16, gy - s * 0.16, gx, gy - s);
-      ctx.closePath(); ctx.fill();
+      const s = (8.5 + 2.5 * b) / camera.zoom;                          // 屏上固定 ~9~11px，任何缩放都可见
+      ctx.fillStyle = 'rgba(255,214,90,' + (a * 0.26).toFixed(3) + ')'; // 亮时外扩金黄光晕
+      ctx.beginPath(); ctx.arc(gx, gy, s * 2.0, 0, 7); ctx.fill();
+      ctx.beginPath();                                                  // 标准五角星：10 顶点外内交替，一角朝上
+      for (let k = 0; k < 10; k++){
+        const ang = -Math.PI/2 + k * Math.PI / 5;
+        const rr = (k % 2 === 0) ? s : s * 0.42;
+        const px = gx + Math.cos(ang) * rr, py = gy + Math.sin(ang) * rr;
+        if (k) ctx.lineTo(px, py); else ctx.moveTo(px, py);
+      }
+      ctx.closePath();
+      ctx.fillStyle = 'rgba(255,248,214,' + (0.10 + 0.80 * a).toFixed(3) + ')';   // 星体填充随呼吸（熄灭时接近透明）
+      ctx.fill();
+      ctx.lineWidth = 1.7 / camera.zoom;                                // 常驻描边：不发光也看得见线条
+      ctx.strokeStyle = 'rgba(255,236,150,.70)';
+      ctx.stroke();
     }
   }
 }
