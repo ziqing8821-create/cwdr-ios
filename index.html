@@ -701,7 +701,7 @@
 
   <div class="mm-toast" id="mmToast"></div>
   <p class="mm-tip">游戏内：按住塔查看攻击范围 · 点击塔查看信息 · Ctrl+G 怪物图鉴 · 空格/下一波 开始进攻</p>
-  <div class="mm-ver">正常模式第四版 V10.2 · 图鉴词典卡（词性·多义·词组） · by 你的私人游戏开发助手</div>
+  <div class="mm-ver">正常模式第四版 V10.3 · 嫩绿卡通史莱姆回归 · by 你的私人游戏开发助手</div>
 </div>
 
 <div id="gameover">
@@ -2328,21 +2328,26 @@ const MONSTER_NAMES = {
   healer: '治疗怪', blinker: '闪烁怪', decoy: '替身怪', splitter: '分裂怪',
   giant: '巨型怪', commander: '指挥官', boss: 'BOSS',
 };
+/* V10.3：普通怪回归嫩绿卡通史莱姆（更可爱）。CARTOON_R=卡通身体倍率；AURA_SIZE=变体光环/边缘光对大卡通身体的贴合倍率。
+   想换回金黄贴图怪：MONSTER_DRAW.normal 改回 drawSlime 且 ART_SCALE.normal 恢复 4.8、此二表清掉 normal 项即可 */
+const CARTOON_R = { normal: 2.4 };
+const AURA_SIZE = { normal: [3.0, 2.5, 2.3, 2.0] };   // 柔光 rx ry · 描边 rx ry（×m.r）
 function drawVariantAura(m){
   const v = VARIANT_CFG[m.variant];
   if (!v || m.dead) return;
   ctx.save();
   // 光晕底：怪物身后的彩色柔光（加粗加深便于区分）
+  const az = AURA_SIZE[m.type];
   ctx.fillStyle = v.aura;
   ctx.shadowColor = v.glow;
   ctx.shadowBlur = m.r * 1.2;
-  ctx.beginPath(); ctx.ellipse(0, 0, m.r*1.7, m.r*1.5, 0, 0, 7); ctx.fill();
+  ctx.beginPath(); ctx.ellipse(0, 0, m.r*(az ? az[0] : 1.7), m.r*(az ? az[1] : 1.5), 0, 0, 7); ctx.fill();
   // 边缘光：沿怪物轮廓的发光描边（更粗更浓）
   ctx.globalAlpha = .82;
   ctx.strokeStyle = v.glow;
   ctx.lineWidth = 3;
   ctx.shadowBlur = m.r * 1.0;
-  ctx.beginPath(); ctx.ellipse(0, m.r*0.05, m.r*1.3, m.r*1.12, 0, 0, 7); ctx.stroke();
+  ctx.beginPath(); ctx.ellipse(0, m.r*0.05, m.r*(az ? az[2] : 1.3), m.r*(az ? az[3] : 1.12), 0, 0, 7); ctx.stroke();
   ctx.restore();
 }
 let showFamily = false;   // G 键：44 种怪物家族图鉴
@@ -5264,7 +5269,7 @@ function roundRect(x,y,w,h,r){
 /* ============ 搞怪卡通普通怪（V3.1） ============ */
 function drawFunnyNormal(m){
   const t = m.animT;
-  const R = m.r * 1.7;   // 卡通怪比原几何怪画得更大，细节更清晰
+  const R = m.r * (CARTOON_R[m.type] || 1.7);   // V10.3：大格时代卡通普通怪放大到 2.4×r（其余卡通怪保持 1.7）
   const dead = m.dead;
   // 死亡动画：先胀大弹起，再压扁渐隐
   if (dead){
@@ -5782,7 +5787,7 @@ function pickAnim(m, base){  const ok = k => { const r = SPRITE_SHEETS[base+'_'+
   const w = ok('walk');
   return w ? { rec: w, mode: 'cycle', cycle: m.slow > 0 ? 1.4 : 0.9 } : null;   // 0.9s 步态周期（V9.3 降速），减速怪拖慢
 }
-const ART_SCALE = { normal: 4.8 };        // V9.4：精灵显示半径倍数（普通怪近一格大，看得清）
+const ART_SCALE = {};        // V10.3：贴图怪暂停（金黄史莱姆留档备用）；接新贴图时在此填 { type: 倍率 }
 function drawSlime(m){
   const a = pickAnim(m, 'slime');
   if (!a){ drawFunnyNormal(m); return; }
@@ -5805,7 +5810,7 @@ function drawSlime(m){
   ctx.drawImage(rec.img, idx*rec.fw, 0, rec.fw, rec.fw, -R/2, -R*0.965, R, R);
 }
 const MONSTER_DRAW = {
-  normal: drawSlime, scout: drawScout, runner: drawRunner, tank: drawTank,
+  normal: drawFunnyNormal, scout: drawScout, runner: drawRunner, tank: drawTank,   // V10.3：普通怪=嫩绿卡通史莱姆
   healer: drawHealer, blinker: drawBlinker, decoy: drawDecoy, splitter: drawSplitter,
   giant: drawGiant, commander: drawCommander, boss: drawBoss,
 };
@@ -5827,7 +5832,7 @@ function drawMonsters(){
     if (!m.dead){
       // V9.4：精灵怪身体高大，染色圈抬到躯干重心、半径放大贴合剪影
       const artY = m.y - (ART_SCALE[m.type] ? m.r*2.2 : 0);
-      const artR = m.r * (ART_SCALE[m.type] ? 1.8 : 1.12);
+      const artR = m.r * (ART_SCALE[m.type] ? 1.8 : CARTOON_R[m.type] ? CARTOON_R[m.type]*0.9 : 1.12);   // V10.3：大卡通身体贴合
       if (m.stun > 0){
         ctx.fillStyle = 'rgba(148,210,255,.32)';
         ctx.beginPath(); ctx.arc(m.x, artY, artR, 0, 7); ctx.fill();
@@ -5857,7 +5862,7 @@ function drawMonsters(){
     if (!m.dead) drawStatusIcons(m);
     if (!m.dead){
       const wpx = m.r*2*1.7;
-      const headY = m.y - m.r*(ART_SCALE[m.type] ? ART_SCALE[m.type]*0.88 : 1.7) - 16;   // V9.4：血条跟随精灵身高
+      const headY = m.y - m.r*(ART_SCALE[m.type] ? ART_SCALE[m.type]*0.88 : CARTOON_R[m.type] ? CARTOON_R[m.type]*1.35 : 1.7) - 16;   // V9.4：血条跟随身高；V10.3：卡通含呆毛留位
       ctx.fillStyle = 'rgba(0,0,0,.5)';
       ctx.fillRect(m.x-wpx/2, headY, wpx, 5);
       ctx.fillStyle = m.hp/m.maxHp>0.5?'#6bdc8f' : m.hp/m.maxHp>0.25?'#ffd75e':'#ff6b6b';
@@ -5895,7 +5900,7 @@ function drawStatusIcons(m){
   const iw = r0*2 + numW;
   const total = n*iw + (n-1)*gap;
   let x = m.x - total/2 + r0;
-  const y = m.y - m.r*(ART_SCALE && ART_SCALE[m.type] ? ART_SCALE[m.type]*0.88 + 0.9 : 1.9) - 32;   // V9.4：图标跟随精灵身高抬高，永远悬在头顶上方
+  const y = m.y - m.r*(ART_SCALE && ART_SCALE[m.type] ? ART_SCALE[m.type]*0.88 + 0.9 : CARTOON_R && CARTOON_R[m.type] ? CARTOON_R[m.type]*1.6 : 1.9) - 32;   // V9.4：图标跟随身高抬高；V10.3：卡通同调
   for (const it of icons){
     // 深色半透明圆底 + 状态色描边（免疫背景干扰）
     ctx.fillStyle = 'rgba(8,14,24,.62)';
