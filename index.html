@@ -431,14 +431,6 @@
   #rotwrap.rot90 #panel { height: 100%; }
   #rotwrap.rot90 #hud { max-width: 96%; }
   #rotwrap.rot90 #mainmenu .mm-settings { max-width: 96%; }
-  /* ============ V10.12：iPhone 退路——iOS Safari 旋转缩放卡死在 PWA 层治不净，竖屏改盖"请横屏游玩"遮罩（放平秒消失）；安卓仍无缝强转 ============ */
-  #rotHint { position: fixed; inset: 0; z-index: 300; display: none; background: rgba(10,14,22,.95); color: #eaf0f6;
-    align-items: center; justify-content: center; flex-direction: column; gap: 18px; text-align: center; padding: 24px; }
-  #rotHint.show { display: flex; }
-  #rotHint .rh-phone { font-size: 66px; animation: rhSpin 2.2s ease-in-out infinite; }
-  #rotHint .rh-t { font-size: 22px; font-weight: 800; color: #ffd75e; letter-spacing: 3px; }
-  #rotHint .rh-s { font-size: 13px; color: #9fb2c8; line-height: 1.9; }
-  @keyframes rhSpin { 0%,18% { transform: rotate(0deg); } 52%,86% { transform: rotate(-90deg); } 100% { transform: rotate(-90deg); } }
   #app.fs canvas#cv { position: absolute; left: 50%; transform: translateX(-50%); margin: 0; }
   #app.fs #hud {
     position: absolute; top: 0; left: 0; right: 0; z-index: 40;
@@ -717,7 +709,7 @@
 
   <div class="mm-toast" id="mmToast"></div>
   <p class="mm-tip">游戏内：按住塔查看攻击范围 · 点击塔查看信息 · Ctrl+G 怪物图鉴 · 空格/下一波 开始进攻</p>
-  <div class="mm-ver">正常模式第四版 V10.12 · iPhone竖屏遮罩引导(治不死缩放退路) · by 你的私人游戏开发助手</div>
+  <div class="mm-ver">正常模式第四版 V10.13 · iPhone强横屏回归(不信假视口) · by 你的私人游戏开发助手</div>
 </div>
 
 <div id="gameover">
@@ -1981,7 +1973,9 @@ function fitCanvasToWindow(){
   const vv = window.visualViewport;   // 手机浏览器带工具栏时 innerHeight 虚高，visualViewport 更准
   const winW0 = (vv && vv.width)  || window.innerWidth  || 1280;
   const winH0 = (vv && vv.height) || window.innerHeight || 720;
-  const winW = rotActive ? winH0 : winW0, winH = rotActive ? winW0 : winH0;   // V10.7：强转横屏时游戏空间宽高互换
+  // V10.13：强转横屏时以 rotWrap 实际尺寸为准（它由 applyOrientation 用可信值定好，不再读 vv 假值）
+  const winW = rotActive ? (rotWrap.clientWidth  || winH0) : winW0;
+  const winH = rotActive ? (rotWrap.clientHeight || winW0) : winH0;
   const hudH = (document.getElementById('hud') || {}).offsetHeight || 52;
   const availW = Math.max(200, winW - 10);
   const availH = Math.max(160, winH - hudH - 10);
@@ -2009,22 +2003,17 @@ function canvasPt(cx, cy){                       // client 物理坐标 → 画�
     : { x: (cx - r.left) * CW / r.width,  y: (cy - r.top) * CH / r.height };
 }
 function canvasDelta(dx, dy){ return rotActive ? { x: dy, y: -dx } : { x: dx, y: dy }; }   // 屏幕像素位移 → 游戏空间位移（旋转时换轴）
-/* V10.12：iOS(iPhone/iPad，含新系统 Mac 化 UA) 竖屏不强转——Safari 旋转缩放卡死 bug 运行时治不净，
-   改盖"请横屏游玩"遮罩引导物理转屏（放平秒消失，进度不丢）；安卓/iPadOS 以外仍走 V10.10/11 无缝强转 */
+/* V10.13：iPhone 恢复强制横屏（用户拍板"只能横屏玩"，遮罩方案删除）。此前"变大+能推滑"的真凶：
+   iOS 旋转瞬间 visualViewport/innerWidth 报旧朝向假值（844×390），版面按假值排。
+   对策：iOS 一律只信两个不说谎的源——screen.width/height（恒为设备物理长短边，旋转时从不重算）
+   与 orientation.angle（转屏即时准确）。meta 也不再为 iOS 改写（碰 Safari 越少越稳）。 */
 const IS_IOS = /iP(hone|ad|od)/i.test(navigator.userAgent || '') || (/Macintosh/.test(navigator.userAgent || '') && (navigator.maxTouchPoints || 0) > 1);
-const rotHint = document.createElement('div');
-rotHint.id = 'rotHint';
-rotHint.innerHTML = '<div class="rh-phone">📱</div><div class="rh-t">请横屏游玩</div>' +
-  '<div class="rh-s">iPhone 网页无法强制锁定横屏<br>把手机转成横放即可继续，进度不会丢<br>（安卓设备为自动无缝横屏）</div>';
-document.body.appendChild(rotHint);   // 挂在 rotwrap 之外：竖屏时按自然方向立着显示
-let hintPausedByUs = false;           // 记录"暂停是遮罩按的"，恢复时只解自己按的
-/* V10.11：旋转缩放卡死的动态 meta 改写（screen 长短边=不随旋转时序撒谎的可信源；flip 保证属性必变触发 Safari 重算） */
 const VP_BASE = 'width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover';
-function syncViewportMeta(on){
+function syncViewportMeta(on){   // 仅安卓仍用 V10.11 动态 meta 加固；iOS/桌面永远保持静态原 meta
   const m = document.querySelector('meta[name="viewport"]');
   if (!m) return;
   const touch = ('ontouchstart' in window) || (navigator.maxTouchPoints || 0) > 0;
-  if (!touch || IS_IOS){ if (m.getAttribute('content') !== VP_BASE) m.setAttribute('content', VP_BASE); return; }   // 桌面与 iOS（走遮罩不旋转）不动 meta
+  if (!touch || IS_IOS){ if (m.getAttribute('content') !== VP_BASE) m.setAttribute('content', VP_BASE); return; }
   const sMin = Math.min(screen.width || 0, screen.height || 0) || window.innerWidth || 980;
   const sMax = Math.max(screen.width || 0, screen.height || 0) || window.innerWidth || 980;
   const want = 'width=' + Math.round(on ? sMin : sMax) + ', initial-scale=1, maximum-scale=1.0, user-scalable=no, viewport-fit=cover';
@@ -2036,20 +2025,22 @@ function applyOrientation(){
   const vw = (vv && vv.width)  || window.innerWidth  || 1280;
   const vh = (vv && vv.height) || window.innerHeight || 720;
   const touch = ('ontouchstart' in window) || (navigator.maxTouchPoints || 0) > 0;
-  const portrait = touch && vw < vh && Math.max(vw, vh) <= 1200;   // 只限手机/平板；桌面与大屏触控一体机不受管
-  rotHint.classList.toggle('show', portrait && IS_IOS);             // iOS 竖屏→遮罩接管；安卓竖屏→继续无缝强转
-  // 遮罩期间替玩家按暂停，放平瞬间恢复（只恢复自己按的那次，不越权动玩家手动的暂停）
-  if (portrait && IS_IOS){
-    if (!hintPausedByUs && !paused && !menuOpen && !gameOver && !gameWin){ paused = true; hintPausedByUs = true; $('pauseBtn').textContent = '▶'; }
-  } else if (hintPausedByUs){ paused = false; hintPausedByUs = false; $('pauseBtn').textContent = '⏸'; }
-  const on = portrait && !IS_IOS;
-  rotActive = on;
-  if (on){ rotWrap.classList.add('rot90'); rotWrap.style.width = vh + 'px'; rotWrap.style.height = vw + 'px'; }
-  else   { rotWrap.classList.remove('rot90'); rotWrap.style.width = '';      rotWrap.style.height = ''; }
-  syncViewportMeta(on);   // 先稳缩放，再量画布（顺序重要：fitCanvas 读的 vv 数值要落在正确倍率上）
+  const sMin = Math.min(screen.width || 0, screen.height || 0) || (IS_IOS ? 0 : Math.min(vw, vh));
+  const sMax = Math.max(screen.width || 0, screen.height || 0) || (IS_IOS ? 0 : Math.max(vw, vh));
+  const small = IS_IOS ? (sMax > 0 && sMax <= 1200)                       // iOS：物理长边判手机/平板（不受旋转时序影响）
+                       : Math.max(vw, vh) <= 1200;                        // 安卓：vv 数值在安卓旋转中可信
+  const ang = (screen.orientation && typeof screen.orientation.angle === 'number') ? screen.orientation.angle
+            : (typeof window.orientation === 'number' ? Math.abs(window.orientation) : null);
+  const portrait = touch && small && (ang != null ? (ang % 180 === 0) : vw < vh);   // 角度优先（旋转即刻正确）；无角度 API 的旧安卓退回 vv
+  rotActive = portrait;
+  if (portrait){
+    const gW = IS_IOS ? sMax : Math.round(vh), gH = IS_IOS ? sMin : Math.round(vw);   // 游戏空间长边×短边
+    rotWrap.classList.add('rot90'); rotWrap.style.width = gW + 'px'; rotWrap.style.height = gH + 'px';
+  } else { rotWrap.classList.remove('rot90'); rotWrap.style.width = ''; rotWrap.style.height = ''; }
+  syncViewportMeta(portrait);   // 先稳缩放，再量画布
   fitCanvasToWindow();
 }
-window.addEventListener('orientationchange', () => { setTimeout(applyOrientation, 60); setTimeout(applyOrientation, 300); });   // iOS 旋转动画中 visualViewport 数值会撒谎，落定后再补算两次
+window.addEventListener('orientationchange', () => { setTimeout(applyOrientation, 60); setTimeout(applyOrientation, 300); });   // 转屏动画落定后补算，兜住事件时序
 try { screen.orientation && screen.orientation.lock && screen.orientation.lock('landscape').catch(function(){}); } catch(e){}   // 安卓/PWA 能锁则锁，iOS 静默失败靠 CSS 旋转兜底
 function worldToScreen(wx, wy){
   return { x: (wx - camera.x)*camera.zoom + CW/2, y: (wy - camera.y)*camera.zoom + CH/2 };
