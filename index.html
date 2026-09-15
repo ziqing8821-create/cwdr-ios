@@ -431,6 +431,14 @@
   #rotwrap.rot90 #panel { height: 100%; }
   #rotwrap.rot90 #hud { max-width: 96%; }
   #rotwrap.rot90 #mainmenu .mm-settings { max-width: 96%; }
+  /* ============ V10.12：iPhone 退路——iOS Safari 旋转缩放卡死在 PWA 层治不净，竖屏改盖"请横屏游玩"遮罩（放平秒消失）；安卓仍无缝强转 ============ */
+  #rotHint { position: fixed; inset: 0; z-index: 300; display: none; background: rgba(10,14,22,.95); color: #eaf0f6;
+    align-items: center; justify-content: center; flex-direction: column; gap: 18px; text-align: center; padding: 24px; }
+  #rotHint.show { display: flex; }
+  #rotHint .rh-phone { font-size: 66px; animation: rhSpin 2.2s ease-in-out infinite; }
+  #rotHint .rh-t { font-size: 22px; font-weight: 800; color: #ffd75e; letter-spacing: 3px; }
+  #rotHint .rh-s { font-size: 13px; color: #9fb2c8; line-height: 1.9; }
+  @keyframes rhSpin { 0%,18% { transform: rotate(0deg); } 52%,86% { transform: rotate(-90deg); } 100% { transform: rotate(-90deg); } }
   #app.fs canvas#cv { position: absolute; left: 50%; transform: translateX(-50%); margin: 0; }
   #app.fs #hud {
     position: absolute; top: 0; left: 0; right: 0; z-index: 40;
@@ -709,7 +717,7 @@
 
   <div class="mm-toast" id="mmToast"></div>
   <p class="mm-tip">游戏内：按住塔查看攻击范围 · 点击塔查看信息 · Ctrl+G 怪物图鉴 · 空格/下一波 开始进攻</p>
-  <div class="mm-ver">正常模式第四版 V10.11 · viewport动态重写修死缩放 · by 你的私人游戏开发助手</div>
+  <div class="mm-ver">正常模式第四版 V10.12 · iPhone竖屏遮罩引导(治不死缩放退路) · by 你的私人游戏开发助手</div>
 </div>
 
 <div id="gameover">
@@ -2001,15 +2009,22 @@ function canvasPt(cx, cy){                       // client 物理坐标 → 画�
     : { x: (cx - r.left) * CW / r.width,  y: (cy - r.top) * CH / r.height };
 }
 function canvasDelta(dx, dy){ return rotActive ? { x: dy, y: -dx } : { x: dx, y: dy }; }   // 屏幕像素位移 → 游戏空间位移（旋转时换轴）
-/* V10.11：iOS 旋转后视觉缩放卡死 bug 的根治——动态改写 viewport meta。
-   用 screen 长短边（不随旋转时序撒谎的唯一可信源）显式声明 width 像素值，
-   并保证每次改写内容必有变化（flip），强制 Safari 重算整页缩放；window.scrollTo 清掉残留平移 */
+/* V10.12：iOS(iPhone/iPad，含新系统 Mac 化 UA) 竖屏不强转——Safari 旋转缩放卡死 bug 运行时治不净，
+   改盖"请横屏游玩"遮罩引导物理转屏（放平秒消失，进度不丢）；安卓/iPadOS 以外仍走 V10.10/11 无缝强转 */
+const IS_IOS = /iP(hone|ad|od)/i.test(navigator.userAgent || '') || (/Macintosh/.test(navigator.userAgent || '') && (navigator.maxTouchPoints || 0) > 1);
+const rotHint = document.createElement('div');
+rotHint.id = 'rotHint';
+rotHint.innerHTML = '<div class="rh-phone">📱</div><div class="rh-t">请横屏游玩</div>' +
+  '<div class="rh-s">iPhone 网页无法强制锁定横屏<br>把手机转成横放即可继续，进度不会丢<br>（安卓设备为自动无缝横屏）</div>';
+document.body.appendChild(rotHint);   // 挂在 rotwrap 之外：竖屏时按自然方向立着显示
+let hintPausedByUs = false;           // 记录"暂停是遮罩按的"，恢复时只解自己按的
+/* V10.11：旋转缩放卡死的动态 meta 改写（screen 长短边=不随旋转时序撒谎的可信源；flip 保证属性必变触发 Safari 重算） */
 const VP_BASE = 'width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover';
 function syncViewportMeta(on){
   const m = document.querySelector('meta[name="viewport"]');
   if (!m) return;
   const touch = ('ontouchstart' in window) || (navigator.maxTouchPoints || 0) > 0;
-  if (!touch){ if (m.getAttribute('content') !== VP_BASE) m.setAttribute('content', VP_BASE); return; }   // 桌面不动 meta
+  if (!touch || IS_IOS){ if (m.getAttribute('content') !== VP_BASE) m.setAttribute('content', VP_BASE); return; }   // 桌面与 iOS（走遮罩不旋转）不动 meta
   const sMin = Math.min(screen.width || 0, screen.height || 0) || window.innerWidth || 980;
   const sMax = Math.max(screen.width || 0, screen.height || 0) || window.innerWidth || 980;
   const want = 'width=' + Math.round(on ? sMin : sMax) + ', initial-scale=1, maximum-scale=1.0, user-scalable=no, viewport-fit=cover';
@@ -2021,7 +2036,13 @@ function applyOrientation(){
   const vw = (vv && vv.width)  || window.innerWidth  || 1280;
   const vh = (vv && vv.height) || window.innerHeight || 720;
   const touch = ('ontouchstart' in window) || (navigator.maxTouchPoints || 0) > 0;
-  const on = touch && vw < vh && Math.max(vw, vh) <= 1200;   // 只限手机/平板；桌面与大屏触控一体机不受强转
+  const portrait = touch && vw < vh && Math.max(vw, vh) <= 1200;   // 只限手机/平板；桌面与大屏触控一体机不受管
+  rotHint.classList.toggle('show', portrait && IS_IOS);             // iOS 竖屏→遮罩接管；安卓竖屏→继续无缝强转
+  // 遮罩期间替玩家按暂停，放平瞬间恢复（只恢复自己按的那次，不越权动玩家手动的暂停）
+  if (portrait && IS_IOS){
+    if (!hintPausedByUs && !paused && !menuOpen && !gameOver && !gameWin){ paused = true; hintPausedByUs = true; $('pauseBtn').textContent = '▶'; }
+  } else if (hintPausedByUs){ paused = false; hintPausedByUs = false; $('pauseBtn').textContent = '⏸'; }
+  const on = portrait && !IS_IOS;
   rotActive = on;
   if (on){ rotWrap.classList.add('rot90'); rotWrap.style.width = vh + 'px'; rotWrap.style.height = vw + 'px'; }
   else   { rotWrap.classList.remove('rot90'); rotWrap.style.width = '';      rotWrap.style.height = ''; }
