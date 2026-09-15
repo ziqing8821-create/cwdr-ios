@@ -423,6 +423,12 @@
     border-radius: 0; overflow: hidden; background: #a8d88f;   /* 方案C：外围留白=草地绿 */
   }
   #app.fs.fs-normal #left { background: #a8d88f; }
+  /* ============ V10.7 强制横屏：触摸设备竖持时整个 body 旋转90°（竖屏不可游玩；fixed 层自动以 body 为基准） ============ */
+  body.rot90 { position: fixed; top: 0; left: 0; margin: 0; overflow: hidden; transform-origin: 0 0; transform: rotate(90deg) translateY(-100%); }
+  body.rot90 #app.fs #left { width: 100% !important; height: 100% !important; }   /* 旋转时 vw/vh 单位指向反了，改用百分比 */
+  body.rot90 #panel { height: 100%; }
+  body.rot90 #hud { max-width: 96%; }
+  body.rot90 #mainmenu .mm-settings { max-width: 96%; }
   #app.fs canvas#cv { position: absolute; left: 50%; transform: translateX(-50%); margin: 0; }
   #app.fs #hud {
     position: absolute; top: 0; left: 0; right: 0; z-index: 40;
@@ -701,7 +707,7 @@
 
   <div class="mm-toast" id="mmToast"></div>
   <p class="mm-tip">游戏内：按住塔查看攻击范围 · 点击塔查看信息 · Ctrl+G 怪物图鉴 · 空格/下一波 开始进攻</p>
-  <div class="mm-ver">正常模式第四版 V10.3 · 嫩绿卡通史莱姆回归 · by 你的私人游戏开发助手</div>
+  <div class="mm-ver">正常模式第四版 V10.7 · 强制横屏 × 星星种植点 · by 你的私人游戏开发助手</div>
 </div>
 
 <div id="gameover">
@@ -1761,6 +1767,11 @@ let currentLevel = 1;
 function loadLvlProg(){ try { return JSON.parse(localStorage.getItem('dsh_lvl_clear_v1')) || {}; } catch(e){ return {}; } }
 function levelCleared(n){ return !!loadLvlProg()['L'+n]; }
 function markLevelCleared(n){ const p = loadLvlProg(); p['L'+n] = 1; localStorage.setItem('dsh_lvl_clear_v1', JSON.stringify(p)); }
+const TESTBENCH = false;   // 🧪 怪物试跑台构建标记：build_testbench.js 从 game.html 复制后置 true——无限能量/手动放怪/基地不破/慢动作暂停面板。正式版恒 false 零影响
+let testScale = 1;         // 试跑台时间倍速（慢动作观察击杀帧）
+const TB_ASSETS = {};   // 🧪 测试台专用素材（果冻怪精灵/背景图 dataURL）——正式 game.html 恒为空对象 {}
+const TB_MONSTERS = [];   // 🧪 怪物库定义数组（怪物测试\怪物库\*\monster.json 构建注入）——正式恒为空数组 []
+let TB_BG = null;                   // 🧪 测试台战场背景 Image（boot 从 TB_ASSETS 赋值；正式恒 null 零影响）
 let DEV_UNLOCK_ALL = true;   // ⚠ 开发期调试开关：true=五十关全开随便玩；上线前改 false 恢复逐级解锁
 function levelUnlocked(n){ return DEV_UNLOCK_ALL || n === 1 || levelCleared(n-1); }
 /* —— 关卡地图 UI —— */
@@ -1944,6 +1955,7 @@ function switchMap(def){
   PATHS = def.paths.map(p => p.map(pt => ({x:pt.x, y:pt.y})));
   rebuildPathData();
   cameraFree = def.free;
+  starSeed = (Math.random() * 1e9) | 0;   // V10.7：每次进入关卡，种植点星星的呼吸节奏全部重摇
   if (cameraFree){
     camera.zoom = def.zoom0; camera.x = def.camX; camera.y = def.camY;
   } else {
@@ -1957,8 +1969,9 @@ function switchMap(def){
 // V7.2 双模式统一方案C：contain 完整显示铺满（无尽也允许放大，不再小图+黑边），HUD 下方垂直居中，留白=草地色。
 function fitCanvasToWindow(){
   const vv = window.visualViewport;   // 手机浏览器带工具栏时 innerHeight 虚高，visualViewport 更准
-  const winW = (vv && vv.width)  || window.innerWidth  || 1280;
-  const winH = (vv && vv.height) || window.innerHeight || 720;
+  const winW0 = (vv && vv.width)  || window.innerWidth  || 1280;
+  const winH0 = (vv && vv.height) || window.innerHeight || 720;
+  const winW = rotActive ? winH0 : winW0, winH = rotActive ? winW0 : winH0;   // V10.7：强转横屏时游戏空间宽高互换
   const hudH = (document.getElementById('hud') || {}).offsetHeight || 52;
   const availW = Math.max(200, winW - 10);
   const availH = Math.max(160, winH - hudH - 10);
@@ -1970,8 +1983,30 @@ function fitCanvasToWindow(){
   // 垂直居中于 HUD 下方可用区：top = HUD高 + (可用高 − 画布高)/2（关键：画布高要减掉，否则下半截被裁）
   cv.style.top = Math.round(hudH + Math.max(0, (winH - hudH - ch) / 2)) + 'px';
 }
-window.addEventListener('resize', fitCanvasToWindow);
-if (window.visualViewport) window.visualViewport.addEventListener('resize', fitCanvasToWindow);
+window.addEventListener('resize', applyOrientation);   // V10.7：resize/转屏统一走"横屏判定+重布局"
+if (window.visualViewport) window.visualViewport.addEventListener('resize', applyOrientation);
+/* ============ V10.7 强制横屏：手机/平板竖屏→body旋转90°，坐标/拖拽随之换算 ============ */
+let rotActive = false;
+function canvasPt(cx, cy){                       // client 物理坐标 → 画布逻辑坐标（旋转时自动逆运算）
+  const r = cv.getBoundingClientRect();
+  return rotActive
+    ? { x: (cy - r.top) * CW / r.height, y: (r.right - cx) * CH / r.width }
+    : { x: (cx - r.left) * CW / r.width,  y: (cy - r.top) * CH / r.height };
+}
+function canvasDelta(dx, dy){ return rotActive ? { x: dy, y: -dx } : { x: dx, y: dy }; }   // 屏幕像素位移 → 游戏空间位移（旋转时换轴）
+function applyOrientation(){
+  const vv = window.visualViewport;
+  const vw = (vv && vv.width)  || window.innerWidth  || 1280;
+  const vh = (vv && vv.height) || window.innerHeight || 720;
+  const touch = ('ontouchstart' in window) || (navigator.maxTouchPoints || 0) > 0;
+  const on = touch && vw < vh && Math.max(vw, vh) <= 1200;   // 只限手机/平板；桌面与大屏触控一体机不受强转
+  rotActive = on;
+  const b = document.body;
+  if (on){ b.classList.add('rot90'); b.style.width = vh + 'px'; b.style.height = vw + 'px'; }
+  else   { b.classList.remove('rot90'); b.style.width = '';      b.style.height = ''; }
+  fitCanvasToWindow();
+}
+try { screen.orientation && screen.orientation.lock && screen.orientation.lock('landscape').catch(function(){}); } catch(e){}   // 安卓/PWA 能锁则锁，iOS 静默失败靠 CSS 旋转兜底
 function worldToScreen(wx, wy){
   return { x: (wx - camera.x)*camera.zoom + CW/2, y: (wy - camera.y)*camera.zoom + CH/2 };
 }
@@ -1987,9 +2022,8 @@ cv.addEventListener('mousedown', e => {
     dragPan = { sx: e.clientX, sy: e.clientY, camX: camera.x, camY: camera.y };
   } else if (e.button === 0){
     // 左键按下：检测是否按住某座塔（用于显示攻击范围）
-    const rect = cv.getBoundingClientRect();
-    const sx = (e.clientX-rect.left)*CW/rect.width, sy = (e.clientY-rect.top)*CH/rect.height;
-    const w = screenToWorld(sx, sy);
+    const pt = canvasPt(e.clientX, e.clientY);   // V10.7：含强制横屏逆换算
+    const w = screenToWorld(pt.x, pt.y);
     pressedTower = null;
     if (!editMode){
       for (const t of towers){
@@ -2004,22 +2038,20 @@ window.addEventListener('mouseup', e => {
 });
 window.addEventListener('mousemove', e => {
   if (dragPan){
-    const dx = (e.clientX - dragPan.sx)/camera.zoom;
-    const dy = (e.clientY - dragPan.sy)/camera.zoom;
-    camera.x = clamp(dragPan.camX - dx, 0, WORLD_W);
-    camera.y = clamp(dragPan.camY - dy, 0, WORLD_H);
+    const dd = canvasDelta(e.clientX - dragPan.sx, e.clientY - dragPan.sy);   // V10.7：旋转时换轴
+    camera.x = clamp(dragPan.camX - dd.x/camera.zoom, 0, WORLD_W);
+    camera.y = clamp(dragPan.camY - dd.y/camera.zoom, 0, WORLD_H);
     cameraClamp();   // V7.2：整图小于视口时锁中心
   }
 });
 cv.addEventListener('wheel', e => {
   e.preventDefault();
   if (!cameraFree) return;   // V7.1：固定一屏地图禁止缩放
-  const rect = cv.getBoundingClientRect();
-  const sx = (e.clientX-rect.left)*CW/rect.width, sy = (e.clientY-rect.top)*CH/rect.height;
-  const before = screenToWorld(sx, sy);
+  const pt = canvasPt(e.clientX, e.clientY);   // V10.7
+  const before = screenToWorld(pt.x, pt.y);
   const factor = e.deltaY < 0 ? 1.12 : 1/1.12;
   camera.zoom = clamp(camera.zoom * factor, zoomMin(), ZOOM_MAX);   // V7.2：缩放下限=整图铺满即停
-  const after = screenToWorld(sx, sy);
+  const after = screenToWorld(pt.x, pt.y);
   camera.x += (before.x - after.x);
   camera.y += (before.y - after.y);
   cameraClamp();
@@ -2042,12 +2074,10 @@ try {
       const ts = e.touches;
       if (tPinch && ts.length >= 2){
         e.preventDefault(); touchMoved = true;
-        const rect = cv.getBoundingClientRect();
-        const mx = ((ts[0].clientX+ts[1].clientX)/2 - rect.left)*CW/rect.width;
-        const my = ((ts[0].clientY+ts[1].clientY)/2 - rect.top)*CH/rect.height;
-        const before = screenToWorld(mx, my);
+        const pm = canvasPt((ts[0].clientX+ts[1].clientX)/2, (ts[0].clientY+ts[1].clientY)/2);   // V10.7：捏合中心逆换算
+        const before = screenToWorld(pm.x, pm.y);
         camera.zoom = clamp(tPinch.z0 * (tDist(ts)/tPinch.d0), zoomMin(), ZOOM_MAX);
-        const after = screenToWorld(mx, my);
+        const after = screenToWorld(pm.x, pm.y);
         camera.x += before.x - after.x; camera.y += before.y - after.y;
         cameraClamp();
       } else if (tPan && ts.length === 1){
@@ -2055,8 +2085,9 @@ try {
         const ddx = t.clientX - tPan.sx, ddy = t.clientY - tPan.sy;
         if (!tPan.moved){ if (Math.hypot(ddx,ddy) < 10) return; tPan.moved = true; }
         e.preventDefault(); touchMoved = true;
-        camera.x = clamp(tPan.camX - ddx/camera.zoom, 0, WORLD_W);
-        camera.y = clamp(tPan.camY - ddy/camera.zoom, 0, WORLD_H);
+        const dd2 = canvasDelta(ddx, ddy);   // V10.7：旋转时换轴
+        camera.x = clamp(tPan.camX - dd2.x/camera.zoom, 0, WORLD_W);
+        camera.y = clamp(tPan.camY - dd2.y/camera.zoom, 0, WORLD_H);
         cameraClamp();
       }
     }, { passive:false });
@@ -4354,6 +4385,7 @@ function updateMonsters(dt){
     m.animT += dt * (m.slow>0 ? 0.35 : 1);   // 走路动画：减速时慢动作
 
     if (m.progress >= PATH_DATA[m.pathIdx].len){
+      if (TESTBENCH){ m.dead = true; m.deadT = 0.3; continue; }   // 🧪 试跑台：怪到基地静默消失，不碰基地血
       BASE.hp -= m.dmg;
       m.dead = true;
       m.deadT = 0.5;
@@ -4705,9 +4737,8 @@ function updateNotice(dt){
 /* ============ 种植交互：点击 + 打字 ============ */
 cv.addEventListener('click', e => {
   if (gameOver || gameWin || dragPan || touchMoved) return;   // V10.1：触摸拖拽后的合成 click 不算点塔
-  const rect = cv.getBoundingClientRect();
-  const sx = (e.clientX-rect.left)*CW/rect.width;
-  const sy = (e.clientY-rect.top)*CH/rect.height;
+  const pt0 = canvasPt(e.clientX, e.clientY);   // V10.7：含强制横屏逆换算
+  const sx = pt0.x, sy = pt0.y;
   // V5.2：怪物图鉴打开时，点右上角 ✕ 关闭
   if (showFamily){
     if (Math.hypot(sx-(CW-38), sy-38) <= 22){ showFamily = false; }
@@ -5108,13 +5139,19 @@ function applyCam(){
   ctx.scale(camera.zoom, camera.zoom);
   ctx.translate(-camera.x, -camera.y);
 }
+/* V10.7：种植点星星的随机种子——每关 switchMap 重摇，每颗星的相位/周期由它+格坐标哈希出，永不齐闪 */
+let starSeed = (Math.random() * 1e9) | 0;
 function drawMap(){
   // V7.2：世界外缝隙=草地绿（缩到最小整图时全屏纯绿+金黄框，不再出现黑带）
-  ctx.fillStyle = '#a8d88f';
-  ctx.fillRect(-2000,-2000, WORLD_W+4000, WORLD_H+4000);
-  // 战斗地图内：纯浅绿草地（无交错格子）
-  ctx.fillStyle = '#a8d88f';
-  ctx.fillRect(0,0,WORLD_W,WORLD_H);
+  // 🧪 V10.5b 测试台全屏背景模式：画布不铺底色（透明），背景图由 CSS 层盖满整个战场容器而非仅地图矩形
+  const tbBgFull = TESTBENCH && TB_BG && TB_BG.width;
+  if (!tbBgFull){
+    ctx.fillStyle = '#a8d88f';
+    ctx.fillRect(-2000,-2000, WORLD_W+4000, WORLD_H+4000);
+    // 战斗地图内：纯浅绿草地（无交错格子）
+    ctx.fillStyle = '#a8d88f';
+    ctx.fillRect(0,0,WORLD_W,WORLD_H);
+  }
   ctx.strokeStyle = '#ffd75e'; ctx.lineWidth = 6;   // V7.2：战争地图外圈框线=显眼黄（与金币同色系）
   ctx.strokeRect(0,0,WORLD_W,WORLD_H);
   if (editMode) return;   // V9.5：编辑中底层不画真实路面/入口/基地/种植点——以免"撤销了但旧地图还画着"的鬼影（草稿全权由 drawEditOverlay 呈现）
@@ -5162,23 +5199,33 @@ function drawMap(){
   ctx.fillRect(b.x-40, b.y+38, 80, 10);
   ctx.fillStyle = '#ff6b6b';
   ctx.fillRect(b.x-40, b.y+38, 80*(b.hp/b.maxHp), 10);
-  // 可种植点位：红点标示（固定屏幕大小，任何缩放都清晰可见；位于格子中心，与塔/种植判定严格对齐）
-  const dotR = 6 / camera.zoom;   // 屏幕约 6px 的世界半径（固定视觉大小）
+  // V10.7：可种植点位=呼吸发光的四角小星星（每颗相位/周期随机、每关重摇；亮部暖白、光晕金黄，任何地图背景都清晰）
+  const sT = performance.now() / 1000;
   const i0 = Math.max(0, Math.ceil((camera.x - CW/2/camera.zoom - CELL/2)/CELL));
   const i1 = Math.min(Math.floor(WORLD_W/CELL), Math.floor((camera.x + CW/2/camera.zoom - CELL/2)/CELL));
   const j0 = Math.max(0, Math.ceil((camera.y - CH/2/camera.zoom - CELL/2)/CELL));
   const j1 = Math.min(Math.floor(WORLD_H/CELL), Math.floor((camera.y + CH/2/camera.zoom - CELL/2)/CELL));
-  ctx.fillStyle = '#e74c3c';
-  ctx.globalAlpha = 0.55;
   for (let ix=i0; ix<=i1; ix++){
     for (let iy=j0; iy<=j1; iy++){
       const gx = ix*CELL + CELL/2, gy = iy*CELL + CELL/2;
-      if (spotFree(gx, gy)){
-        ctx.beginPath(); ctx.arc(gx, gy, dotR, 0, 7); ctx.fill();
-      }
+      if (!spotFree(gx, gy)) continue;
+      let h = ((ix + 3) * 73856093 ^ (iy + 5) * 19349663 ^ ((starSeed + ix * 7 + iy * 13) | 0) * 83492791) >>> 0;
+      h = Math.imul(h ^ (h >>> 13), 1274126177) >>> 0;
+      const b = 0.5 + 0.5 * Math.sin(sT * 6.283 / (1.6 + (h & 31) / 11) + (h % 6283) / 1000);   // 呼吸波：周期 1.6~4.4s 随机
+      const a = 0.10 + 0.90 * b * b;                                    // 缓亮急灭（平方曲线）
+      const s = (7.5 + 2.5 * b) / camera.zoom;                          // 屏上固定 ~8~10px，任何缩放都可见
+      ctx.fillStyle = 'rgba(255,214,90,' + (a * 0.28).toFixed(3) + ')'; // 金黄光晕
+      ctx.beginPath(); ctx.arc(gx, gy, s * 2.1, 0, 7); ctx.fill();
+      ctx.fillStyle = 'rgba(255,248,214,' + (0.22 + 0.78 * a).toFixed(3) + ')';   // 四角星体
+      ctx.beginPath();
+      ctx.moveTo(gx, gy - s);
+      ctx.quadraticCurveTo(gx + s * 0.16, gy - s * 0.16, gx + s, gy);
+      ctx.quadraticCurveTo(gx + s * 0.16, gy + s * 0.16, gx, gy + s);
+      ctx.quadraticCurveTo(gx - s * 0.16, gy + s * 0.16, gx - s, gy);
+      ctx.quadraticCurveTo(gx - s * 0.16, gy - s * 0.16, gx, gy - s);
+      ctx.closePath(); ctx.fill();
     }
   }
-  ctx.globalAlpha = 1;
 }
 function drawTowers(){
   for (const t of towers){
@@ -6445,9 +6492,10 @@ function loop(now){
     return;
   }
   if (!paused && !gameOver && !gameWin){
-    const sdt = dt * speed;
+    if (TESTBENCH){ energy = 999; BASE.hp = BASE.maxHp; }   // 🧪 试跑台：无限能量随便种塔，基地永不破
+    const sdt = dt * speed * testScale;
     elapsed += sdt;
-    updateWaves(sdt);
+    if (!TESTBENCH) updateWaves(sdt);   // 🧪 试跑台：砍掉波次系统（自动开波/通关判定全失效），怪只从面板来
     updateMonsters(sdt);
     updateTowers(sdt);
     updateProjectiles(sdt);
@@ -6578,7 +6626,7 @@ $('goldTxt').textContent = energy;
 updateModeTxt();        // V7：初始化 HUD 模式标识与波次显示
 $('hpFill').style.width = '100%';
 paintMenuSettings();
-fitCanvasToWindow();    // V7.2：启动即按全屏布局摆好战场（双模式统一）
+applyOrientation();   // V10.7：启动即做强制横屏判定 + 按全屏布局摆好战场（双模式统一）
 requestAnimationFrame(loop);
 /* V9.7b：非独立运行模式才弹安装引导；✕ 关掉后永久不再打扰 */
 try {
@@ -6601,7 +6649,7 @@ try {
       var t = e.touches && e.touches[0]; if (t){ tX=t.clientX; tY=t.clientY; tT=Date.now(); }
     }, { passive:true });
     document.addEventListener('touchend', function(e){
-      var sel = '#hud button, #softKb button, .panel-close, .kb-x, .set-btn, #installTipClose, .mode-card, .mm-btn, #mainmenu button, .edBtn, #win button, #over button, .lm-node, #lvlBack, .witem';
+      var sel = '#hud button, #softKb button, .panel-close, .kb-x, .set-btn, #installTipClose, .mode-card, .mm-btn, #mainmenu button, .edBtn, #win button, #over button, .lm-node, #lvlBack, .witem, #testPanel button';
       var el = (e.target && e.target.closest) ? e.target.closest(sel) : null;
       if (!el) return;
       var t = e.changedTouches && e.changedTouches[0]; if (!t) return;
@@ -6612,6 +6660,159 @@ try {
     }, { passive:false });
   })();
 } catch(e){}
+/* ============ 🧪 V10.4 怪物试跑台（仅 TESTBENCH=true 的构建生效；正式 game.html 恒 false，零影响） ============ */
+if (TESTBENCH){
+  (function(){
+    // 🧪 启动即落图：跳过主菜单/模式选择/波次系统，直接进一张稍复杂的多路战争地图
+    menuOpen = false; gameMode = 'normal';
+    closeMainMenu();                          // 藏菜单+重置状态（updateWaves 已被砍，不会有自动波）
+    $('nextWaveBtn').style.display = 'none';
+    $('waveTxt').textContent = '🧪';
+    const DBG_MAPS = [3, 6, 4, 9];            // 试跑预设：三路围城 / 四门合击 / 螺旋迷宫 / 魔王王座（LEVELS 下标）
+    let dbgMi = -1;
+    function loadDbgMap(){
+      const li = DBG_MAPS[((++dbgMi) % DBG_MAPS.length + DBG_MAPS.length) % DBG_MAPS.length];
+      currentLevel = li + 1;
+      switchMap(LEVELS[li].map);
+      monsters.length = 0; projectiles.length = 0; particles.length = 0; floatTexts.length = 0;
+      towers.length = 0; ownedTower = null;
+      $('modeTxt').textContent = '🧪 ' + LEVELS[li].name;
+      setNotice('🧪 地图《' + LEVELS[li].name + '》：⚡∞ 能量随便种塔 · 怪只从左下角面板投放 · 🔄 可换图', '');
+    }
+    loadDbgMap();
+    // —— 🧪 V10.6 怪物库驱动：测试通过怪物全部来自 怪物测试\怪物库（构建注入 TB_MONSTERS/TB_ASSETS）——
+    const TB_IMG = {};
+    for (const def of TB_MONSTERS){
+      if (TB_ASSETS[def.key]){ const im = new Image(); const kk = def.key; im.onload = () => { TB_IMG[kk] = im; }; im.src = TB_ASSETS[kk]; }
+    }
+    if (TB_ASSETS.bg1){
+      const im = new Image();
+      im.onload = () => {
+        TB_BG = im;
+        // 🧪 全屏背景：把图钉在画布容器的 CSS 层上，center/cover 铺满整个战场可视区（地图外留白也是图）
+        try { const box = cv.parentElement || document.body; box.style.background = '#a8d88f url("' + TB_ASSETS.bg1 + '") center / cover no-repeat'; } catch(e){}
+      };
+      im.src = TB_ASSETS.bg1;
+    }
+    function drawSpriteJelly(m, def){
+      // "果冻弹跳"动画注册表成员：一张静帧 → 弹跳步态+受击闪烁+死亡摊饼，参数可被 monster.json 的 animP 微调
+      const A = def.animP || {};
+      const hopK = A.hopK == null ? 0.32 : A.hopK, squashK = A.squashK == null ? 0.17 : A.squashK;
+      const stretchK = A.stretchK == null ? 0.10 : A.stretchK, T = A.period == null ? 1.0 : A.period;
+      const D = m.r * (def.scaleR || 5.2), footY = m.r * (def.footK || 1.35);   // 脚线贴路面
+      let hop = 0, sq = 1, rot = 0, alpha = 1, airNow = 0;
+      if (m.dead){
+        const k = clamp(1 - m.deadT / 0.6, 0, 1);
+        sq = Math.max(0.07, 1 - k * 1.1);                    // 啪叽摊地
+        alpha = Math.max(0, m.deadT / 0.6);
+      } else if (m.stun > 0){
+        rot = Math.sin(m.animT * 2.2) * 0.16;                // 眩晕左右摇（脚不离地）
+        sq = 1 + Math.sin(m.animT * 9) * 0.03;
+      } else {
+        // 无缝步态：跳弧→落地压扁回弹→站地呼吸，交界帧形变/位移严格连续（防"卡一下"）
+        const p = (((m.animT % T) + T) % T) / T;
+        if (p < 0.40){                                   // ① 一次完整的跳：离地→顶点→落回（p=0.4 脚触地）
+          const u = p / 0.40;
+          airNow = Math.sin(u * Math.PI);
+          hop = -D * hopK * airNow;
+          sq = 1 + airNow * stretchK;                    // 腾空微拉长
+        } else if (p < 0.70){                            // ② 落地冲击：只做强竖直压扁回弹（不左右晃）
+          const v = (p - 0.40) / 0.30;
+          sq = 1 - squashK * Math.sin(v * Math.PI);
+        } else {                                         // ③ 站地蓄力：轻微呼吸感（窗口函数保证无缝）
+          const w = (p - 0.70) / 0.30;
+          sq = 1 + 0.015 * Math.sin(m.animT * 5) * Math.sin(w * Math.PI);
+        }
+        if (m.flash > 0){ sq -= 0.12; alpha = 0.65; }    // 受击：猛缩 + 半透明闪
+      }
+      const sx = Math.min(1.9, 1 / Math.sqrt(Math.max(0.07, sq)));   // 体积守恒横缩比
+      ctx.fillStyle = 'rgba(24,44,12,.20)';                  // 地面投影（腾空缩小，落地贴合）
+      ctx.beginPath(); ctx.ellipse(0, footY, D * 0.42 * (1 - airNow * 0.3), D * 0.10, 0, 0, 7); ctx.fill();
+      ctx.save();
+      ctx.globalAlpha = alpha;
+      ctx.translate(0, footY + hop);
+      ctx.rotate(rot);
+      ctx.scale((m.flipX ? -1 : 1) * sx, sq);
+      const img = TB_IMG[def.key];
+      if (img){
+        ctx.drawImage(img, -D / 2, -D, D, D);
+      } else {                                               // 无图兜底：矢量软糖（沙箱冒烟也走这支）
+        ctx.globalAlpha = alpha * 0.92;
+        ctx.fillStyle = def.color || '#ff7ac8';
+        ctx.beginPath(); ctx.ellipse(0, -D * 0.42, D * 0.45, D * 0.42, 0, 0, 7); ctx.fill();
+        ctx.globalAlpha = alpha * 0.5;
+        ctx.fillStyle = '#ffffff';
+        ctx.beginPath(); ctx.ellipse(-D * 0.14, -D * 0.62, D * 0.10, D * 0.055, -0.5, 0, 7); ctx.fill();
+        ctx.globalAlpha = alpha;
+        ctx.fillStyle = '#2a1620';
+        ctx.beginPath(); ctx.arc(-D * 0.13, -D * 0.42, D * 0.045, 0, 7); ctx.fill();
+        ctx.beginPath(); ctx.arc(D * 0.11, -D * 0.42, D * 0.045, 0, 7); ctx.fill();
+      }
+      ctx.restore();
+    }
+    const TB_ANIMS = { jelly: drawSpriteJelly };             // 新动画种类=在此加函数并在 monster.json anim 指定
+    for (const def of TB_MONSTERS){
+      if (!def.key || MONSTER_DRAW[def.key]) continue;       // 不允许覆盖正式怪
+      MONSTER_TYPES[def.key] = { hp: def.hp || 200, spd: def.spd || 40, energy: def.energy || 2, dmg: def.dmg || 1, r: def.r || 13, color: def.color || '#ff7ac8' };   // 仅测试台构建注册，正式怪表零污染
+      MONSTER_NAMES[def.key] = def.name || def.key;
+      const sR = def.scaleR || 5.2;
+      CARTOON_R[def.key] = def.hpBarR || Math.round(sR * 0.615 * 100) / 100;                 // 血条高度跟随身体
+      AURA_SIZE[def.key] = def.aura || [Math.round(sR*0.77*100)/100, Math.round(sR*0.73*100)/100, Math.round(sR*0.615*100)/100, Math.round(sR*0.615*100)/100];   // 变体光环
+      const fn = TB_ANIMS[def.anim] || TB_ANIMS.jelly;
+      MONSTER_DRAW[def.key] = function(mm){ fn(mm, def); };
+    }
+    const P = document.createElement('div');
+    P.id = 'testPanel';
+    P.style.cssText = 'position:fixed;left:10px;bottom:10px;z-index:130;background:rgba(10,16,28,.93);border:1px solid #3d5a80;border-radius:10px;padding:10px 12px;color:#d5e2ef;font-size:12px;display:flex;flex-direction:column;gap:7px;box-shadow:0 10px 30px rgba(0,0,0,.6);max-width:330px;';
+    const ctl = 'background:#1c2636;color:#e8f1ff;border:1px solid #3d5a80;border-radius:6px;padding:5px 8px;font-size:12px;min-height:32px;touch-action:manipulation;';
+    P.innerHTML =
+      '<div style="color:#ffd75e;font-weight:bold">🧪 怪物试跑台 <span style="color:#8aa0b8;font-weight:normal;font-size:10px">⚡∞ 能量 · 🏠 基地不破</span></div>' +
+      '<div style="display:flex;gap:6px;flex-wrap:wrap;align-items:center">' +
+        '<select id="tpType" style="'+ctl+'">' + Object.keys(MONSTER_NAMES).map(t => '<option value="'+t+'">'+MONSTER_NAMES[t]+'</option>').join('') + '</select>' +
+        '<select id="tpVar" style="'+ctl+'"><option value="">无光</option><option value="红">红光</option><option value="紫">紫光</option><option value="黑">黑光</option></select>' +
+        '<input id="tpQty" type="number" value="5" min="1" max="80" style="'+ctl+'width:52px">' +
+        '<label style="display:flex;align-items:center;gap:4px"><input id="tpAuto" type="checkbox" style="min-height:0">每2秒自动</label>' +
+      '</div>' +
+      '<div style="display:flex;gap:6px;flex-wrap:wrap">' +
+        '<button id="tpSpawn" style="'+ctl+'cursor:pointer">🚀 投放</button>' +
+        '<button id="tpKill" style="'+ctl+'cursor:pointer">☠ 秒杀全部</button>' +
+        '<button id="tpClear" style="'+ctl+'cursor:pointer">🧹 清空</button>' +
+        '<button id="tpMap" style="'+ctl+'cursor:pointer">🔄 换地图</button>' +
+        '<button id="tpSlow" style="'+ctl+'cursor:pointer">🐢 慢动作</button>' +
+      '</div>' +
+      '<div id="tpInfo" style="color:#8aa0b8">点🚀在当前地图随机入口放怪 · 塔随便种 · 击杀看死亡/分裂动画</div>';
+    document.body.appendChild(P);
+    let autoTimer = null;
+    function ensureRunning(){
+      if (menuOpen){ menuOpen = false; closeMainMenu(); }
+      if (editMode) exitEditMode(false);
+      if (showFamily) showFamily = false;
+    }
+    function spawn(){
+      ensureRunning();
+      const type = $('tpType').value, variant = $('tpVar').value || null;
+      const qty = Math.max(1, Math.min(80, +$('tpQty').value || 5));
+      const pathN = Math.max(1, PATHS.length);
+      for (let i=0;i<qty;i++) monsters.push(makeMonster(type, 0, Math.floor(Math.random()*pathN), variant));
+    }
+    $('tpSpawn').addEventListener('click', spawn);
+    $('tpKill').addEventListener('click', () => { monsters.slice().forEach(m => { if (!m.dead) killMonster(m, null); }); });
+    $('tpClear').addEventListener('click', () => { monsters = []; });
+    $('tpMap').addEventListener('click', loadDbgMap);
+    $('tpSlow').addEventListener('click', function(){
+      testScale = testScale === 1 ? 0.25 : 1;
+      this.style.background = testScale < 1 ? '#4d6f9c' : '#1c2636';
+    });
+    $('tpAuto').addEventListener('change', function(){
+      if (autoTimer){ clearInterval(autoTimer); autoTimer = null; }
+      if (this.checked) autoTimer = setInterval(spawn, 2000);
+    });
+    setInterval(() => {
+      const alive = monsters.filter(m => !m.dead).length;
+      $('tpInfo').textContent = '战斗中：' + alive + ' 只 · 总在场 ' + monsters.length + ' · ⚡' + energy;
+    }, 300);
+  })();
+}
 /* V9.7 iOS PWA：Service Worker 离线缓存（仅 https 线上环境注册；本地 file:// 与冒烟沙箱自动跳过） */
 try { if (navigator.serviceWorker && location.protocol === 'https:') navigator.serviceWorker.register('sw.js'); } catch(e){}
 </script>
