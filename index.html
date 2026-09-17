@@ -5269,6 +5269,7 @@ function drawMap(){
   const shake = Math.max(0, 1 - (performance.now() - (hb.hitAt || -9e9))/320);           // 被咬反馈
   const lean  = dead ? 0.16 : (1-hpF)*0.05 + (hpF<0.33 ? Math.sin(nowT*23)*0.012 : 0) + shake*Math.sin(nowT*60)*0.05;
   ctx.rotate(lean);
+  ctx.scale(1.1, 1.1);  // V10.40：家屋整体放大10%
   ctx.fillStyle = '#8a6a4a'; ctx.beginPath(); ctx.ellipse(0, 36, 48, 11, 0, 0, 7); ctx.fill();   // 土坡地基
   ctx.fillStyle = '#c88a4e'; ctx.fillRect(-30, -4, 60, 40);                                      // 木墙
   ctx.strokeStyle = '#96612f'; ctx.lineWidth = 2;
