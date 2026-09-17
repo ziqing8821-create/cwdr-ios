@@ -727,7 +727,7 @@ try{
 
   <div class="mm-toast" id="mmToast"></div>
   <p class="mm-tip">游戏内：按住塔查看攻击范围 · 点击塔查看信息 · Ctrl+G 怪物图鉴 · 空格/下一波 开始进攻</p>
-  <div class="mm-ver">正常模式第四版 V10.17 · 洞穴入口尺寸统一（同张图所有洞等大） · by 你的私人游戏开发助手</div>
+  <div class="mm-ver">正常模式第四版 V10.19 · 洞穴入口按瓷砖比例（RW60×RR52） · by 你的私人游戏开发助手</div>
 </div>
 
 <div id="gameover">
@@ -5210,7 +5210,7 @@ function drawMap(){
   // V6：删除"路径整体描边"——它在瓷砖正中画了一条线（用户反馈的"中间线"）
   // ============ V10.17：入口洞穴尺寸统一（rw/rr 固定 50×46），同张图所有洞口大小一致；只随机小表情（歪斜/苔藓/碎石/眼相位）============
   const nowT = performance.now()/1000;
-  const RW = 50, RR = 46;   // 洞体恒定：宽50×高46（与旧井盖视觉接近）
+  const RW = 60, RR = 52;   // 洞体恒定：宽60×高52（比无尽瓷砖宽52大15%，与正常瓷砖64接近）
   for (let pi=0; pi<PATHS.length; pi++){
     const p0 = PATHS[pi][0];
     let sd = (Math.imul(pi+7, 2654435761) ^ 0x5f3759df) >>> 0;
