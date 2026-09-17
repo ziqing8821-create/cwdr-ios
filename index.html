@@ -5269,14 +5269,14 @@ function drawMap(){
   const shake = Math.max(0, 1 - (performance.now() - (hb.hitAt || -9e9))/320);           // 被咬反馈
   const lean  = dead ? 0.16 : (1-hpF)*0.05 + (hpF<0.33 ? Math.sin(nowT*23)*0.012 : 0) + shake*Math.sin(nowT*60)*0.05;
   ctx.rotate(lean);
-  ctx.scale(1.1, 1.1);  // V10.40：家屋整体放大10%
+  ctx.scale(1.4, 1.4);  // V10.41：家屋放大40%（梯形屋顶，盖住路径地板）
   ctx.fillStyle = '#8a6a4a'; ctx.beginPath(); ctx.ellipse(0, 36, 48, 11, 0, 0, 7); ctx.fill();   // 土坡地基
   ctx.fillStyle = '#c88a4e'; ctx.fillRect(-30, -4, 60, 40);                                      // 木墙
   ctx.strokeStyle = '#96612f'; ctx.lineWidth = 2;
   for (let wx=-19; wx<=22; wx+=11){ ctx.beginPath(); ctx.moveTo(wx,-4); ctx.lineTo(wx,36); ctx.stroke(); }
   ctx.strokeRect(-30,-4,60,40);
-  ctx.fillStyle = '#5b8bb0';                                                  // 蓝瓦双坡顶（呼应蓝瓷砖路）
-  ctx.beginPath(); ctx.moveTo(-41,-2); ctx.lineTo(0,-37); ctx.lineTo(41,-2); ctx.closePath(); ctx.fill();
+  ctx.fillStyle = '#5b8bb0';                                                  // 蓝瓦梯形屋顶
+  ctx.beginPath(); ctx.moveTo(-48,-2); ctx.lineTo(48,-2); ctx.lineTo(30,-38); ctx.lineTo(-30,-38); ctx.closePath(); ctx.fill();
   ctx.strokeStyle = '#3d6484'; ctx.lineWidth = 3; ctx.stroke();
   ctx.fillStyle = '#8f5b3a'; ctx.fillRect(15,-31,11,17);                      // 烟囱
   ctx.strokeStyle = '#6d4227'; ctx.lineWidth = 2; ctx.strokeRect(15,-31,11,17);
