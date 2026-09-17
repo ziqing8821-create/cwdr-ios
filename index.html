@@ -727,7 +727,7 @@ try{
 
   <div class="mm-toast" id="mmToast"></div>
   <p class="mm-tip">游戏内：按住塔查看攻击范围 · 点击塔查看信息 · Ctrl+G 怪物图鉴 · 空格/下一波 开始进攻</p>
-  <div class="mm-ver">正常模式第四版 V10.28 · 洞穴内圈+10%（洞深感更强） · by 你的私人游戏开发助手</div>
+  <div class="mm-ver">正常模式第四版 V10.29 · 洞穴内圈范围扩大（洞口外框不变） · by 你的私人游戏开发助手</div>
 </div>
 
 <div id="gameover">
@@ -5224,9 +5224,9 @@ function drawMap(){
     ctx.fillStyle = '#5aa860';                                 // 岩顶苔藓（随机高低，但位置随洞中心）
     for (let gi=0; gi<3; gi++){ const gx0 = -RW*0.5 + gi*RW*0.5;
       ctx.beginPath(); ctx.ellipse(gx0, -(RR+6) - ((sd>>>gi)&7)*1.6, 9, 5, 0, 0, 7); ctx.fill(); }
-    ctx.fillStyle = '#2b343c'; ctx.beginPath(); ctx.ellipse(0, 12, RW*0.65, RR*0.63, 0, 0, 7); ctx.fill();   // 洞口外圈（固定）
-    ctx.fillStyle = '#161d24'; ctx.beginPath(); ctx.ellipse(0, 14, RW*0.52, RR*0.53, 0, 0, 7); ctx.fill();  // 中圈（V10.28 +10%）
-    ctx.fillStyle = '#05080b'; ctx.beginPath(); ctx.ellipse(0, 16, RW*0.36, RR*0.42, 0, 0, 7); ctx.fill();  // 纯黑心（V10.28 +10%）
+    ctx.fillStyle = '#2b343c'; ctx.beginPath(); ctx.ellipse(0, 12, RW*0.65, RR*0.63, 0, 0, 7); ctx.fill();   // 洞口外圈（固定边界）
+    ctx.fillStyle = '#161d24'; ctx.beginPath(); ctx.ellipse(0, 14, RW*0.62, RR*0.60, 0, 0, 7); ctx.fill();  // 中圈（V10.29 范围扩大）
+    ctx.fillStyle = '#05080b'; ctx.beginPath(); ctx.ellipse(0, 16, RW*0.48, RR*0.52, 0, 0, 7); ctx.fill();  // 纯黑心（V10.29 范围扩大）
     const ea = 0.16 + 0.5*(0.5 + 0.5*Math.sin(nowT*2.1 + (sd % 6283)/1000));
     ctx.fillStyle = 'rgba(255,86,60,' + ea.toFixed(3) + ')';
     ctx.beginPath(); ctx.arc(-9, 16, 3.4, 0, 7); ctx.fill();
