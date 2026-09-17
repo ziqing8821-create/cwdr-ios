@@ -1,4 +1,4 @@
-﻿<!DOCTYPE html>
+<!DOCTYPE html>
 <html lang="zh">
 <head>
 <meta charset="UTF-8">
@@ -727,7 +727,7 @@ try{
 
   <div class="mm-toast" id="mmToast"></div>
   <p class="mm-tip">游戏内：按住塔查看攻击范围 · 点击塔查看信息 · Ctrl+G 怪物图鉴 · 空格/下一波 开始进攻</p>
-  <div class="mm-ver">正常模式第四版 V10.32 · 洞穴缩5%黑心大10%(RW38×RR33) · by 你的私人游戏开发助手</div>
+  <div class="mm-ver">正常模式第五版 V10.39 · 石板路正式方案(正常+无尽) · by 你的私人游戏开发助手</div>
 </div>
 
 <div id="gameover">
@@ -5193,18 +5193,32 @@ function drawMap(){
   ctx.strokeStyle = '#ffd75e'; ctx.lineWidth = 6;   // V7.2：战争地图外圈框线=显眼黄（与金币同色系）
   ctx.strokeRect(0,0,WORLD_W,WORLD_H);
   if (editMode) return;   // V9.5：编辑中底层不画真实路面/入口/基地/种植点——以免"撤销了但旧地图还画着"的鬼影（草稿全权由 drawEditOverlay 呈现）
-  // V5.3：怪物路径改为保卫萝卜式"淡蓝色小方块瓷砖"堆叠
-  const TILE = PATH_W;   // V7.1：瓷砖尺寸=路径宽（无尽 52 / 正常 64），横竖对齐一块接一块
+  // V10.39：石板路正式方案（正常/无尽/测试台统一）
+  // 底层连续路保证拐角不断，表面按网格铺独立圆角石板
+  const PAVER = 72, PAVER_R = 9;
+  ctx.save();
+  ctx.strokeStyle = '#91c5e5'; ctx.lineWidth = PATH_W; ctx.lineCap = 'round'; ctx.lineJoin = 'round';
+  for (let pi=0; pi<PATHS.length; pi++){
+    ctx.beginPath();
+    PATHS[pi].forEach((pt, i) => i===0 ? ctx.moveTo(pt.x, pt.y) : ctx.lineTo(pt.x, pt.y));
+    ctx.stroke();
+  }
+  ctx.restore();
   for (let pi=0; pi<PATH_DATA.length; pi++){
-    const pd = PATH_DATA[pi];
-    const tilePts = [];
-    for (let d = 0; d <= pd.len + 0.5; d += TILE) tilePts.push(pathPosAt(d, pi));
-    for (const p of tilePts){
-      // V6：纯淡蓝色瓷砖 + 细边框（去除高光/切角，中间不再有横线）
-      ctx.fillStyle = '#a9d3ee';
-      ctx.fillRect(p.x - TILE/2, p.y - TILE/2, TILE, TILE);
-      ctx.strokeStyle = 'rgba(96,138,172,.55)'; ctx.lineWidth = 2;
-      ctx.strokeRect(p.x - TILE/2, p.y - TILE/2, TILE, TILE);
+    const pd = PATH_DATA[pi]; const seen = new Set(); const pavers = [];
+    const addPaver = p => {
+      const key = Math.round(p.x)+','+Math.round(p.y);
+      if (!seen.has(key)){ seen.add(key); pavers.push(p); }
+    };
+    for (let d = 0; d <= pd.len + 0.5; d += GRID_PX) addPaver(pathPosAt(d, pi));
+    for (const wp of pd.pts) addPaver(wp);   // 拐角/端点固定补一块石板
+    for (const p of pavers){
+      const x=p.x-PAVER/2, y=p.y-PAVER/2, w=PAVER, h=PAVER, r=PAVER_R;
+      ctx.beginPath();
+      ctx.moveTo(x+r,y); ctx.arcTo(x+w,y,x+w,y+h,r); ctx.arcTo(x+w,y+h,x,y+h,r);
+      ctx.arcTo(x,y+h,x,y,r); ctx.arcTo(x,y,x+w,y,r); ctx.closePath();
+      ctx.fillStyle = '#c1e4f5'; ctx.fill();
+      ctx.strokeStyle = 'rgba(72,116,148,.65)'; ctx.lineWidth = 2; ctx.stroke();
     }
   }
   // V6：删除"路径整体描边"——它在瓷砖正中画了一条线（用户反馈的"中间线"）
