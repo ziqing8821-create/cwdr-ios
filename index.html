@@ -1,4 +1,4 @@
-<!DOCTYPE html>
+﻿<!DOCTYPE html>
 <html lang="zh">
 <head>
 <meta charset="UTF-8">
@@ -727,7 +727,7 @@ try{
 
   <div class="mm-toast" id="mmToast"></div>
   <p class="mm-tip">游戏内：按住塔查看攻击范围 · 点击塔查看信息 · Ctrl+G 怪物图鉴 · 空格/下一波 开始进攻</p>
-  <div class="mm-ver">正常模式第四版 V10.31 · 无尽统一100网格(32×22=704格) · by 你的私人游戏开发助手</div>
+  <div class="mm-ver">正常模式第四版 V10.32 · 洞穴缩5%黑心大10%(RW38×RR33) · by 你的私人游戏开发助手</div>
 </div>
 
 <div id="gameover">
@@ -5210,7 +5210,7 @@ function drawMap(){
   // V6：删除"路径整体描边"——它在瓷砖正中画了一条线（用户反馈的"中间线"）
   // ============ V10.17：入口洞穴尺寸统一（rw/rr 固定 50×46），同张图所有洞口大小一致；只随机小表情（歪斜/苔藓/碎石/眼相位）============
   const nowT = performance.now()/1000;
-  const RW = 40, RR = 35;   // 洞体恒定：宽40×高35（比V10.26再小5%，所有地图统一）
+  const RW = 38, RR = 33;   // V10.32：比V10.30再小5%（黑心0.58/0.63+10%已由上次完成）
   for (let pi=0; pi<PATHS.length; pi++){
     const p0 = PATHS[pi][0];
     let sd = (Math.imul(pi+7, 2654435761) ^ 0x5f3759df) >>> 0;
@@ -5226,7 +5226,7 @@ function drawMap(){
       ctx.beginPath(); ctx.ellipse(gx0, -(RR+6) - ((sd>>>gi)&7)*1.6, 9, 5, 0, 0, 7); ctx.fill(); }
     ctx.fillStyle = '#2b343c'; ctx.beginPath(); ctx.ellipse(0, 12, RW*0.65, RR*0.63, 0, 0, 7); ctx.fill();   // 洞口外圈（固定边界）
     ctx.fillStyle = '#161d24'; ctx.beginPath(); ctx.ellipse(0, 14, RW*0.62, RR*0.60, 0, 0, 7); ctx.fill();  // 中圈（V10.29 范围扩大）
-    ctx.fillStyle = '#05080b'; ctx.beginPath(); ctx.ellipse(0, 16, RW*0.53, RR*0.57, 0, 0, 7); ctx.fill();  // 纯黑心（V10.30 +10%）
+    ctx.fillStyle = '#05080b'; ctx.beginPath(); ctx.ellipse(0, 16, RW*0.58, RR*0.63, 0, 0, 7); ctx.fill();  // 纯黑心（V10.32 +10%）
     const ea = 0.16 + 0.5*(0.5 + 0.5*Math.sin(nowT*2.1 + (sd % 6283)/1000));
     ctx.fillStyle = 'rgba(255,86,60,' + ea.toFixed(3) + ')';
     ctx.beginPath(); ctx.arc(-9, 16, 3.4, 0, 7); ctx.fill();
