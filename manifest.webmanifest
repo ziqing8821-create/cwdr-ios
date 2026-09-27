@@ -1,0 +1,15 @@
+{
+  "name": "印尼语单词保卫萝卜",
+  "short_name": "单词萝卜",
+  "description": "打印尼语单词守家园的五路塔防 · 50关长图 + 无尽模式",
+  "start_url": "./index.html",
+  "scope": "./",
+  "display": "standalone",
+  "orientation": "any",
+  "background_color": "#141b26",
+  "theme_color": "#141b26",
+  "icons": [
+    { "src": "apple-touch-icon.png", "sizes": "180x180", "type": "image/png" },
+    { "src": "icon-512.png", "sizes": "512x512", "type": "image/png" }
+  ]
+}
